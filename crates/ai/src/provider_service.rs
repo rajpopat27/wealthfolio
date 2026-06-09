@@ -545,8 +545,13 @@ impl AiProviderServiceTrait for AiProviderService {
         let models_url = match provider_id {
             "ollama" => format!("{}/api/tags", base_url.trim_end_matches('/')),
             "google" => format!("{}/v1beta/models", base_url.trim_end_matches('/')),
-            // OpenAI-compatible: OpenAI, Groq, OpenRouter
-            _ => format!("{}/v1/models", base_url.trim_end_matches('/')),
+            // OpenAI-compatible: OpenAI, Groq, OpenRouter.
+            // Strip any trailing /v1 first so we never double-append it.
+            _ => {
+                let base = base_url.trim_end_matches('/');
+                let base = base.strip_suffix("/v1").unwrap_or(base);
+                format!("{}/v1/models", base)
+            }
         };
 
         // Build HTTP client and request

@@ -70,7 +70,13 @@ pub(super) fn create_openai_client(
     let key = api_key.ok_or_else(|| AiError::MissingApiKey(provider_id.to_string()))?;
     let mut builder = openai::CompletionsClient::builder().api_key(&key);
     if let Some(url) = provider_url {
-        builder = builder.base_url(&url);
+        let base = url.trim_end_matches('/');
+        let normalized = if base.ends_with("/v1") {
+            base.to_string()
+        } else {
+            format!("{}/v1", base)
+        };
+        builder = builder.base_url(&normalized);
     }
     builder
         .build()
@@ -222,6 +228,50 @@ pub(super) async fn validate_ollama_model_if_possible(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_openai_base_url_normalization() {
+        // Both forms should produce the same /v1-terminated URL for rig
+        let cases = [
+            ("http://localhost:8080", "http://localhost:8080/v1"),
+            ("http://localhost:8080/", "http://localhost:8080/v1"),
+            ("http://localhost:8080/v1", "http://localhost:8080/v1"),
+            ("http://localhost:8080/v1/", "http://localhost:8080/v1"),
+            ("https://api.openai.com", "https://api.openai.com/v1"),
+        ];
+        for (input, expected) in cases {
+            let base = input.trim_end_matches('/');
+            let normalized = if base.ends_with("/v1") {
+                base.to_string()
+            } else {
+                format!("{}/v1", base)
+            };
+            assert_eq!(normalized, expected, "input: {}", input);
+        }
+    }
+
+    #[test]
+    fn test_list_models_url_normalization() {
+        // Both forms should produce the same /v1/models URL for model listing
+        let cases = [
+            ("http://localhost:8080", "http://localhost:8080/v1/models"),
+            ("http://localhost:8080/", "http://localhost:8080/v1/models"),
+            (
+                "http://localhost:8080/v1",
+                "http://localhost:8080/v1/models",
+            ),
+            (
+                "http://localhost:8080/v1/",
+                "http://localhost:8080/v1/models",
+            ),
+        ];
+        for (input, expected) in cases {
+            let base = input.trim_end_matches('/');
+            let base = base.strip_suffix("/v1").unwrap_or(base);
+            let url = format!("{}/v1/models", base);
+            assert_eq!(url, expected, "input: {}", input);
+        }
+    }
 
     #[test]
     fn test_ollama_model_match_without_latest_suffix() {
