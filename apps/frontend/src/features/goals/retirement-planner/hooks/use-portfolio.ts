@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getAccounts, getLatestValuations, getHoldings } from "@/adapters";
+import { getAccounts, getCurrentValuation, getHoldings } from "@/adapters";
 import { QueryKeys } from "@/lib/query-keys";
 import type { Holding } from "@/lib/types";
 
@@ -17,9 +17,13 @@ export function usePortfolioData(accountIds?: string[]) {
     accountIds !== undefined ? allActiveAccounts.filter((a) => accountIds.includes(a.id)) : []
   ).map((a) => a.id);
 
-  const valuationsQuery = useQuery({
-    queryKey: [QueryKeys.latestValuations, activeAccountIds],
-    queryFn: () => getLatestValuations(activeAccountIds),
+  const currentValuationQuery = useQuery({
+    queryKey: [QueryKeys.CURRENT_VALUATION, "fire", activeAccountIds],
+    queryFn: () =>
+      getCurrentValuation({
+        filter: { type: "accounts", accountIds: activeAccountIds },
+        includeAccounts: false,
+      }),
     enabled: activeAccountIds.length > 0,
     staleTime: 5 * 60 * 1000,
   });
@@ -54,7 +58,7 @@ export function usePortfolioData(accountIds?: string[]) {
     staleTime: 5 * 60 * 1000,
   });
 
-  const totalValue = (valuationsQuery.data ?? []).reduce((sum, v) => sum + v.totalValueBase, 0);
+  const totalValue = currentValuationQuery.data?.summary.totalValueBase ?? 0;
 
   const activeAccounts = accounts.filter((a) => activeAccountIds.includes(a.id));
 
@@ -64,7 +68,8 @@ export function usePortfolioData(accountIds?: string[]) {
     accounts,
     activeAccounts,
     totalValue,
-    isLoading: accountsQuery.isLoading || valuationsQuery.isLoading || holdingsQuery.isLoading,
-    error: valuationsQuery.error || holdingsQuery.error,
+    isLoading:
+      accountsQuery.isLoading || currentValuationQuery.isLoading || holdingsQuery.isLoading,
+    error: currentValuationQuery.error || holdingsQuery.error,
   };
 }

@@ -2,13 +2,13 @@
 
 import { calculatePerformanceSummaries, performanceSummaryScopeKey } from "@/adapters";
 import { useAccounts } from "@/hooks/use-accounts";
-import { useLatestValuations } from "@/hooks/use-latest-valuations";
+import { useCurrentAccountValuations } from "@/hooks/use-current-account-valuations";
 import { AccountPurpose } from "@/lib/constants";
 import { performanceHeadlineReturn, performancePeriodPnl } from "@/lib/performance";
 import { QueryKeys } from "@/lib/query-keys";
 import { useSettingsContext } from "@/lib/settings-provider";
 import type {
-  AccountValuation,
+  CurrentAccountValuation,
   DateRange,
   PerformanceSummaryScope,
   TrackingMode,
@@ -276,7 +276,17 @@ const AccountSummaryComponent = React.memo(
 AccountSummaryComponent.displayName = "AccountSummaryComponent";
 
 export const AccountsSummary = React.memo(
-  ({ dateRange, isAllTime }: { dateRange?: DateRange; isAllTime?: boolean }) => {
+  ({
+    dateRange,
+    isAllTime,
+    currentAccountValuations: currentAccountValuationsProp,
+    isLoadingCurrentValuations: isLoadingCurrentValuationsProp,
+  }: {
+    dateRange?: DateRange;
+    isAllTime?: boolean;
+    currentAccountValuations?: CurrentAccountValuation[];
+    isLoadingCurrentValuations?: boolean;
+  }) => {
     const { accountsGrouped, setAccountsGrouped, settings } = useSettingsContext();
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
@@ -291,7 +301,17 @@ export const AccountsSummary = React.memo(
 
     const accountIds = useMemo(() => accounts?.map((acc) => acc.id) ?? [], [accounts]);
 
-    const { latestValuations, isLoading: isLoadingValuations } = useLatestValuations(accountIds);
+    const shouldFetchCurrentValuations = currentAccountValuationsProp === undefined;
+    const {
+      currentAccountValuations: fetchedCurrentAccountValuations,
+      isLoading: isLoadingFetchedCurrentValuations,
+    } = useCurrentAccountValuations(accountIds, {
+      enabled: shouldFetchCurrentValuations,
+    });
+    const currentAccountValuations =
+      currentAccountValuationsProp ?? fetchedCurrentAccountValuations;
+    const isLoadingCurrentValuations =
+      isLoadingCurrentValuationsProp ?? isLoadingFetchedCurrentValuations;
 
     const startDate =
       !isAllTime && dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined;
@@ -343,9 +363,11 @@ export const AccountsSummary = React.memo(
 
     const combinedAccountViews = useMemo((): AccountSummaryDisplayData[] => {
       if (!accounts || accounts.length === 0) return [];
-      const valuationMap = new Map<string, AccountValuation>();
-      if (latestValuations) {
-        latestValuations.forEach((val: AccountValuation) => valuationMap.set(val.accountId, val));
+      const valuationMap = new Map<string, CurrentAccountValuation>();
+      if (currentAccountValuations) {
+        currentAccountValuations.forEach((val: CurrentAccountValuation) =>
+          valuationMap.set(val.accountId, val),
+        );
       }
       return accounts.map((acc): AccountSummaryDisplayData => {
         const valuation = valuationMap.get(acc.id);
@@ -391,7 +413,7 @@ export const AccountsSummary = React.memo(
           isGroup: false,
         };
       });
-    }, [accounts, latestValuations, performanceSummaries, settings?.baseCurrency]);
+    }, [accounts, currentAccountValuations, performanceSummaries, settings?.baseCurrency]);
 
     const toggleGroup = useCallback((groupName: string) => {
       setExpandedGroups((prev) => ({
@@ -448,7 +470,7 @@ export const AccountsSummary = React.memo(
         );
       }
 
-      const isLoadingPerformance = isLoadingValuations || isLoadingPerformanceQueries;
+      const isLoadingPerformance = isLoadingCurrentValuations || isLoadingPerformanceQueries;
 
       if (accountsGrouped) {
         const groups: Record<string, AccountSummaryDisplayData[]> = {};
@@ -585,7 +607,7 @@ export const AccountsSummary = React.memo(
       expandedGroups,
       toggleGroup,
       isLoadingAccounts,
-      isLoadingValuations,
+      isLoadingCurrentValuations,
       isLoadingPerformanceQueries,
       performanceSummaries,
       isErrorAccounts,

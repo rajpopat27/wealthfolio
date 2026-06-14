@@ -16,7 +16,8 @@ use wealthfolio_core::health::HealthServiceTrait;
 use wealthfolio_core::portfolio::snapshot::{
     reconcile_quote_sync_from_latest_account_snapshots, SnapshotRecalcMode,
 };
-use wealthfolio_core::portfolio::valuation::ValuationRecalcMode;
+use wealthfolio_core::portfolio::valuation::{CurrentAccountValuationService, ValuationRecalcMode};
+use wealthfolio_core::utils::time_utils::{parse_user_timezone_or_default, user_today};
 
 #[cfg(feature = "connect-sync")]
 use super::planner::plan_broker_sync;
@@ -540,7 +541,6 @@ async fn refresh_all_goal_summaries(context: &Arc<ServiceContext>) {
         return;
     }
 
-    // Fetch valuations once for all accounts
     let accounts = match context.account_service().get_active_non_archived_accounts() {
         Ok(a) => a,
         Err(e) => {
@@ -549,19 +549,44 @@ async fn refresh_all_goal_summaries(context: &Arc<ServiceContext>) {
         }
     };
     let account_ids: Vec<String> = accounts.into_iter().map(|a| a.id).collect();
-    let valuations = match context
-        .valuation_service()
-        .get_latest_valuations(&account_ids)
+    let base_currency = context.get_base_currency();
+    let timezone = context.get_timezone();
+    let today = user_today(parse_user_timezone_or_default(&timezone));
+    let latest_snapshot_cutoff = today.succ_opt().unwrap_or(today);
+    let account_service = context.account_service();
+    let snapshot_repository = context.snapshot_repository();
+    let asset_service = context.asset_service();
+    let quote_service = context.quote_service();
+    let fx_service = context.fx_service();
+    let service = CurrentAccountValuationService::new(
+        account_service.as_ref(),
+        snapshot_repository.as_ref(),
+        asset_service.as_ref(),
+        quote_service.as_ref(),
+        fx_service.as_ref(),
+    );
+    let response = match service
+        .get_current_valuation_for_scope(
+            "all",
+            &account_ids,
+            &base_currency,
+            latest_snapshot_cutoff,
+            true,
+        )
+        .await
     {
-        Ok(v) => v,
+        Ok(response) => response,
         Err(e) => {
-            warn!("Failed to load valuations for goal summary refresh: {}", e);
+            warn!(
+                "Failed to load current valuations for goal summary refresh: {}",
+                e
+            );
             return;
         }
     };
 
     let mut valuation_map = std::collections::HashMap::new();
-    for v in &valuations {
+    for v in &response.accounts {
         let Some(value_in_base) = v.total_value_base.to_f64() else {
             warn!(
                 "Skipping goal summary refresh: invalid base valuation total for account {}",

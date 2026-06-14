@@ -75,6 +75,19 @@ pub struct HistoryFilterBody {
 }
 
 #[derive(Deserialize)]
+pub struct CurrentAccountValuationsBody {
+    #[serde(rename = "accountIds", default)]
+    pub account_ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct CurrentValuationBody {
+    pub filter: AccountScope,
+    #[serde(rename = "includeAccounts", default)]
+    pub include_accounts: bool,
+}
+
+#[derive(Deserialize)]
 pub struct SnapshotsQuery {
     #[serde(rename = "accountId")]
     pub account_id: String,

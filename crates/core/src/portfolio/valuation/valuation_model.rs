@@ -91,3 +91,54 @@ pub struct DailyAccountValuation {
     pub performance_eligible_value_base: Decimal,
     pub calculated_at: DateTime<Utc>,
 }
+
+/// Live account valuation derived from the latest holdings snapshot, latest
+/// quotes, and latest FX. This is intentionally separate from daily historical
+/// valuation rows because it has no external-flow/performance semantics.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentAccountValuation {
+    pub account_id: String,
+    pub account_currency: String,
+    pub base_currency: String,
+    pub cash_balance: Decimal,
+    pub investment_market_value: Decimal,
+    pub total_value: Decimal,
+    pub cash_balance_base: Decimal,
+    pub investment_market_value_base: Decimal,
+    pub total_value_base: Decimal,
+    pub source_data_as_of: Option<DateTime<Utc>>,
+    pub calculated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentValuationSplit {
+    pub currency: String,
+    pub value_base: Decimal,
+    pub value_local: Option<Decimal>,
+    pub percentage: Decimal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentValuationSummary {
+    pub scope_id: String,
+    pub base_currency: String,
+    pub cash_balance_base: Decimal,
+    pub investment_market_value_base: Decimal,
+    pub total_value_base: Decimal,
+    pub holdings_count: usize,
+    pub account_count: usize,
+    pub currency_split: Vec<CurrentValuationSplit>,
+    pub cash_currency_split: Vec<CurrentValuationSplit>,
+    pub source_data_as_of: Option<DateTime<Utc>>,
+    pub calculated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentValuationResponse {
+    pub summary: CurrentValuationSummary,
+    pub accounts: Vec<CurrentAccountValuation>,
+}

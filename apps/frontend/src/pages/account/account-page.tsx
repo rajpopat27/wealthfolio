@@ -14,6 +14,7 @@ import {
   PageContent,
   PageHeader,
   PrivacyAmount,
+  Skeleton,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -25,6 +26,7 @@ import { ActionPalette, type ActionPaletteGroup } from "@/components/action-pale
 import { PrivacyToggle } from "@/components/privacy-toggle";
 import { useAccounts } from "@/hooks/use-accounts";
 import { useRecalculatePortfolioMutation } from "@/hooks/use-calculate-portfolio";
+import { useCurrentValuation } from "@/hooks/use-current-account-valuations";
 import { useValuationHistory } from "@/hooks/use-valuation-history";
 import { canAddHoldings } from "@/lib/activity-restrictions";
 import {
@@ -319,8 +321,17 @@ const AccountPage = () => {
     dateRange,
     { type: "account", accountId: id },
   );
+  const {
+    currentValuation: liveCurrentValuation,
+    isLoading: isCurrentValuationLoading,
+    error: currentValuationError,
+  } = useCurrentValuation(
+    { type: "account", accountId: id },
+    { includeAccounts: true, enabled: Boolean(id) },
+  );
 
   const currentValuation = valuationHistory?.[valuationHistory.length - 1];
+  const currentAccountValuation = liveCurrentValuation?.accounts[0];
   const currentCashBalanceIsNegative = (currentValuation?.cashBalance ?? 0) < 0;
   const shouldLoadCashAuditValuationHistory =
     currentCashBalanceIsNegative && !isHoldingsMode && !isLiabilityAccount;
@@ -407,7 +418,18 @@ const AccountPage = () => {
   const frontendGainLossAmount = performancePeriodPnl(accountPerformance);
   const frontendSimpleReturn = performanceHeadlineReturn(accountPerformance);
   const displayedValueCurrency =
-    account?.currency ?? currentValuation?.accountCurrency ?? baseCurrency;
+    account?.currency ??
+    currentAccountValuation?.accountCurrency ??
+    currentValuation?.accountCurrency ??
+    baseCurrency;
+  const displayedTotalValue = currentAccountValuation?.totalValue ?? 0;
+  const displayedSourceDataAsOf =
+    currentAccountValuation?.sourceDataAsOf ??
+    (!currentAccountValuation && !isCurrentValuationLoading && !currentValuationError
+      ? currentValuation?.calculatedAt
+      : undefined);
+  const isCurrentValuationUnavailable =
+    !isCurrentValuationLoading && !currentAccountValuation && Boolean(currentValuationError);
   const performanceCurrency = accountPerformance?.scope.currency ?? baseCurrency;
   const showPerformanceCurrency =
     performanceCurrency.toUpperCase() !== displayedValueCurrency.toUpperCase();
@@ -684,14 +706,20 @@ const AccountPage = () => {
               <Card className="col-span-1 md:col-span-2">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
                   <CardTitle className="text-md">
-                    <PortfolioUpdateTrigger lastCalculatedAt={currentValuation?.calculatedAt}>
+                    <PortfolioUpdateTrigger lastCalculatedAt={displayedSourceDataAsOf}>
                       <div className="flex items-start gap-2">
                         <div>
                           <p className="pt-3 text-xl font-bold">
-                            <PrivacyAmount
-                              value={currentValuation?.totalValue ?? 0}
-                              currency={displayedValueCurrency}
-                            />
+                            {isCurrentValuationLoading ? (
+                              <Skeleton className="h-8 w-36" />
+                            ) : isCurrentValuationUnavailable ? (
+                              <span className="text-muted-foreground">N/A</span>
+                            ) : (
+                              <PrivacyAmount
+                                value={displayedTotalValue}
+                                currency={displayedValueCurrency}
+                              />
+                            )}
                           </p>
                           {!hasPerformanceError && (
                             <div className="flex items-center gap-2 text-sm">

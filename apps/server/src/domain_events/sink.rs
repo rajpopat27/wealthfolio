@@ -64,6 +64,9 @@ impl WebDomainEventSink {
         snapshot_service: Arc<
             dyn wealthfolio_core::portfolio::snapshot::SnapshotServiceTrait + Send + Sync,
         >,
+        snapshot_repository: Arc<
+            dyn wealthfolio_core::portfolio::snapshot::SnapshotRepositoryTrait + Send + Sync,
+        >,
         quote_service: Arc<dyn wealthfolio_core::quotes::QuoteServiceTrait + Send + Sync>,
         valuation_service: Arc<
             dyn wealthfolio_core::portfolio::valuation::ValuationServiceTrait + Send + Sync,
@@ -71,6 +74,7 @@ impl WebDomainEventSink {
         account_service: Arc<wealthfolio_core::accounts::AccountService>,
         goal_service: Arc<dyn GoalServiceTrait + Send + Sync>,
         fx_service: Arc<dyn wealthfolio_core::fx::FxServiceTrait + Send + Sync>,
+        base_currency: Arc<RwLock<String>>,
         timezone: Arc<RwLock<String>>,
         secret_store: Arc<dyn SecretStore>,
         token_lifecycle: Arc<TokenLifecycleState>,
@@ -92,11 +96,13 @@ impl WebDomainEventSink {
             event_bus,
             health_service,
             snapshot_service,
+            snapshot_repository,
             quote_service,
             valuation_service,
             account_service,
             goal_service,
             fx_service,
+            base_currency,
             timezone,
             secret_store,
             token_lifecycle,

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { useQuery } from "@tanstack/react-query";
+import { useCurrentValuation } from "@/hooks/use-current-account-valuations";
 import { useHoldings } from "@/hooks/use-holdings";
 import { useValuationHistory } from "@/hooks/use-valuation-history";
 import { useSettingsContext } from "@/lib/settings-provider";
@@ -21,6 +22,10 @@ vi.mock("@/hooks", () => ({
 
 vi.mock("@/hooks/use-holdings", () => ({
   useHoldings: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-current-account-valuations", () => ({
+  useCurrentValuation: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-valuation-history", () => ({
@@ -51,9 +56,18 @@ vi.mock("@wealthfolio/ui/components/ui/skeleton", () => ({
 }));
 
 vi.mock("@/pages/dashboard/portfolio-update-trigger", () => ({
-  PortfolioUpdateTrigger: ({ children, notices }: { children: ReactNode; notices?: string[] }) => (
+  PortfolioUpdateTrigger: ({
+    children,
+    lastCalculatedAt,
+    notices,
+  }: {
+    children: ReactNode;
+    lastCalculatedAt?: string;
+    notices?: string[];
+  }) => (
     <div>
       <div data-testid="portfolio-notices">{JSON.stringify(notices ?? [])}</div>
+      <div data-testid="portfolio-as-of">{lastCalculatedAt ?? ""}</div>
       {children}
     </div>
   ),
@@ -64,7 +78,7 @@ vi.mock("./accounts-summary", () => ({
 }));
 
 vi.mock("./balance", () => ({
-  default: () => <div>balance</div>,
+  default: ({ targetValue }: { targetValue: number }) => <div>{`balance:${targetValue}`}</div>,
 }));
 
 vi.mock("./goals", () => ({
@@ -76,12 +90,37 @@ vi.mock("./top-holdings", () => ({
 }));
 
 const mockUseQuery = vi.mocked(useQuery);
+const mockUseCurrentValuation = vi.mocked(useCurrentValuation);
 const mockUseHoldings = vi.mocked(useHoldings);
 const mockUseValuationHistory = vi.mocked(useValuationHistory);
 const mockUseSettingsContext = vi.mocked(useSettingsContext);
 
 describe("DashboardContent", () => {
+  function mockCurrentValuation(totalValueBase = 125) {
+    mockUseCurrentValuation.mockReturnValue({
+      currentValuation: {
+        summary: {
+          scopeId: "all",
+          baseCurrency: "USD",
+          cashBalanceBase: 25,
+          investmentMarketValueBase: totalValueBase - 25,
+          totalValueBase,
+          holdingsCount: 2,
+          accountCount: 1,
+          currencySplit: [],
+          cashCurrencySplit: [],
+          sourceDataAsOf: "2026-06-01T12:30:00Z",
+          calculatedAt: "2026-06-01T13:00:00Z",
+        },
+        accounts: [],
+      },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useCurrentValuation>);
+  }
+
   it("does not pass backend performance warnings to dashboard header notices", () => {
+    mockCurrentValuation(125);
     mockUseHoldings.mockReturnValue({
       holdings: [],
       isLoading: false,
@@ -148,5 +187,38 @@ describe("DashboardContent", () => {
 
     expect(screen.getByTestId("portfolio-notices")).toHaveTextContent("[]");
     expect(screen.queryByText(/backend performance warning/i)).not.toBeInTheDocument();
+  });
+
+  it("uses scoped current valuation for the dashboard headline", () => {
+    mockCurrentValuation(125);
+    mockUseHoldings.mockReturnValue({
+      holdings: [
+        {
+          holdingType: "security",
+          marketValue: { base: 100, local: 100 },
+        },
+      ],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useHoldings>);
+    mockUseValuationHistory.mockReturnValue({
+      valuationHistory: [],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useValuationHistory>);
+    mockUseSettingsContext.mockReturnValue({
+      settings: { baseCurrency: "USD" },
+    } as unknown as ReturnType<typeof useSettingsContext>);
+    mockUseQuery.mockReturnValue({
+      isLoading: false,
+      data: null,
+    } as unknown as ReturnType<typeof useQuery>);
+
+    render(<DashboardContent />);
+
+    expect(screen.getByText("balance:125")).toBeInTheDocument();
+    expect(screen.queryByText("balance:100")).not.toBeInTheDocument();
+    expect(screen.getByTestId("portfolio-as-of")).toHaveTextContent("2026-06-01T12:30:00Z");
+    expect(screen.getByTestId("portfolio-as-of")).not.toHaveTextContent("2026-06-01T13:00:00Z");
   });
 });

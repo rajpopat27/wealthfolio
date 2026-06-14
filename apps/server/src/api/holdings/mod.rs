@@ -27,6 +27,14 @@ pub fn router() -> Router<Arc<AppState>> {
             post(handlers::get_historical_valuations_for_scope),
         )
         .route("/valuations/latest", get(handlers::get_latest_valuations))
+        .route(
+            "/valuations/current/query",
+            post(handlers::get_current_valuation),
+        )
+        .route(
+            "/holdings/valuations/current",
+            post(handlers::get_current_account_valuations),
+        )
         .route("/allocations", get(handlers::get_allocations_for_account))
         .route(
             "/allocations/query",

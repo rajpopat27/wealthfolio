@@ -1,6 +1,7 @@
 import { calculatePerformanceSummary } from "@/adapters";
 import { HistoryChart } from "@/components/history-chart";
 import { useHapticFeedback } from "@/hooks";
+import { useCurrentValuation } from "@/hooks/use-current-account-valuations";
 import { useHoldings } from "@/hooks/use-holdings";
 import { useValuationHistory } from "@/hooks/use-valuation-history";
 import { HoldingType, isAlternativeAssetKind } from "@/lib/constants";
@@ -84,6 +85,8 @@ export function DashboardContent() {
   const [isAllTime, setIsAllTime] = useState<boolean>(() => intervalCode === "ALL");
 
   const { holdings: allHoldings, isLoading: isHoldingsLoading } = useHoldings({ type: "all" });
+  const { currentValuation: portfolioCurrentValuation, isLoading: isCurrentValuationLoading } =
+    useCurrentValuation({ type: "all" }, { includeAccounts: true });
   const { triggerHaptic } = useHapticFeedback();
 
   // Filter holdings for display (exclude alternative assets and cash for TopHoldings)
@@ -98,15 +101,7 @@ export function DashboardContent() {
     });
   }, [allHoldings]);
 
-  // Total portfolio value (includes cash, excludes alternative assets)
-  const totalValue = useMemo(() => {
-    if (!allHoldings) return 0;
-    return allHoldings
-      .filter((h) => {
-        return !(h.assetKind && isAlternativeAssetKind(h.assetKind));
-      })
-      .reduce((acc, holding) => acc + (holding.marketValue?.base ?? 0), 0);
-  }, [allHoldings]);
+  const totalValue = portfolioCurrentValuation?.summary.totalValueBase ?? 0;
 
   const { valuationHistory, isLoading: isValuationHistoryLoading } = useValuationHistory(dateRange);
 
@@ -136,12 +131,9 @@ export function DashboardContent() {
 
   const gainLossAmount = performancePeriodPnl(portfolioPerformance);
   const simpleReturn = performanceHeadlineReturn(portfolioPerformance);
-
-  const currentValuation = useMemo(() => {
-    return valuationHistory && valuationHistory.length > 0
-      ? valuationHistory[valuationHistory.length - 1]
-      : null;
-  }, [valuationHistory]);
+  const portfolioSourceDataAsOf =
+    portfolioCurrentValuation?.summary.sourceDataAsOf ??
+    valuationHistory?.[valuationHistory.length - 1]?.calculatedAt;
 
   const chartData = useMemo(() => {
     return (
@@ -180,11 +172,11 @@ export function DashboardContent() {
   return (
     <div className="flex min-h-full flex-col">
       <div className="px-4 pb-1 pt-2 md:px-6 lg:px-8">
-        <PortfolioUpdateTrigger lastCalculatedAt={currentValuation?.calculatedAt}>
+        <PortfolioUpdateTrigger lastCalculatedAt={portfolioSourceDataAsOf}>
           <div className="flex items-start gap-2">
             <div>
               <Balance
-                isLoading={isHoldingsLoading}
+                isLoading={isCurrentValuationLoading}
                 targetValue={totalValue}
                 currency={baseCurrency}
                 displayCurrency={true}
@@ -267,7 +259,12 @@ export function DashboardContent() {
         <div className="grow px-4 pb-[var(--mobile-nav-total-offset)] pt-12 md:px-6 md:pb-6 md:pt-6 lg:px-10 lg:pb-8 lg:pt-8">
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-20">
             <div className="lg:col-span-2">
-              <AccountsSummary dateRange={dateRange} isAllTime={isAllTime} />
+              <AccountsSummary
+                dateRange={dateRange}
+                isAllTime={isAllTime}
+                currentAccountValuations={portfolioCurrentValuation?.accounts}
+                isLoadingCurrentValuations={isCurrentValuationLoading}
+              />
             </div>
             <div className="space-y-6 lg:col-span-1">
               <TopHoldings

@@ -1,4 +1,5 @@
 import { useAccounts } from "@/hooks/use-accounts";
+import { useCurrentValuation } from "@/hooks/use-current-account-valuations";
 import { useHoldings } from "@/hooks/use-holdings";
 import { usePortfolioAllocations } from "@/hooks/use-portfolio-allocations";
 import { usePortfolios } from "@/hooks/use-portfolios";
@@ -26,7 +27,7 @@ import { PortfolioComposition } from "@/pages/holdings/components/composition-ch
 import { DrillableAccountChart } from "@/pages/holdings/components/drillable-account-chart";
 import { DrillableDonutChart } from "@/pages/holdings/components/drillable-donut-chart";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { computeValueStrip } from "./allocation-derivations";
+import { computeValueStrip, valueStripFromCurrentSummary } from "./allocation-derivations";
 import { PortfolioExplorer } from "./portfolio-explorer";
 import { TargetRailsCard } from "./target-rails-card";
 import { ValueStrip } from "./value-strip";
@@ -56,6 +57,10 @@ export function OverviewPage({
     dataUpdatedAt: holdingsUpdatedAt,
     isLoading: holdingsLoading,
   } = useHoldings(accountFilter);
+  const { currentValuation, isLoading: currentValuationLoading } = useCurrentValuation(
+    accountFilter,
+    { includeAccounts: true },
+  );
   const { allocations, isLoading: allocationsLoading } = usePortfolioAllocations(accountFilter);
   const { accounts } = useAccounts();
   const { data: portfolios = [] } = usePortfolios();
@@ -102,7 +107,7 @@ export function OverviewPage({
     includeHoldings: workspaceView === "details",
   });
 
-  const isLoading = holdingsLoading || allocationsLoading;
+  const isLoading = holdingsLoading || allocationsLoading || currentValuationLoading;
   const targetLoading = targetsLoading || driftLoading;
 
   const filteredAccountIds = useMemo(() => {
@@ -137,8 +142,11 @@ export function OverviewPage({
   const rebalanceSourceVersion = `${holdingsUpdatedAt}:${driftUpdatedAt}:${effectiveTarget?.updatedAt ?? ""}`;
 
   const valueStrip = useMemo(
-    () => computeValueStrip(portfolioHoldings, accounts),
-    [portfolioHoldings, accounts],
+    () =>
+      currentValuation?.summary
+        ? valueStripFromCurrentSummary(currentValuation.summary)
+        : computeValueStrip(portfolioHoldings, accounts),
+    [currentValuation?.summary, portfolioHoldings, accounts],
   );
 
   // Detail sheet
@@ -395,7 +403,11 @@ export function OverviewPage({
 
         {/* Row 2 — exploration previews */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <DrillableAccountChart isLoading={isLoading} accountIds={filteredAccountIds} />
+          <DrillableAccountChart
+            isLoading={isLoading}
+            accountIds={filteredAccountIds}
+            accountValuations={currentValuation?.accounts}
+          />
           <DrillableDonutChart
             title="Classes"
             allocation={allocations?.assetClasses}
@@ -447,6 +459,7 @@ export function OverviewPage({
           holdings={holdings ?? []}
           accounts={accounts}
           accountIds={filteredAccountIds}
+          accountValuations={currentValuation?.accounts}
           currency={baseCurrency}
           isLoading={isLoading}
           onOpenAllocation={openAllocationSheet}

@@ -1,9 +1,10 @@
-import type { Account, CategoryAllocation, Holding } from "@/lib/types";
+import type { Account, CategoryAllocation, CurrentValuationSummary, Holding } from "@/lib/types";
 
 /** Minimal per-account valuation shape (matches the accounts simple-performance metrics). */
 export interface AccountValueSource {
   accountId: string;
   totalValue?: number | null;
+  totalValueBase?: number | null;
   fxRateToBase?: number | null;
 }
 
@@ -142,6 +143,31 @@ export function computeValueStrip(holdings: Holding[], accounts: Account[]): Val
   };
 }
 
+export function valueStripFromCurrentSummary(summary: CurrentValuationSummary): ValueStripData {
+  const total = num(summary.totalValueBase);
+  const cash = num(summary.cashBalanceBase);
+  const invested = num(summary.investmentMarketValueBase);
+
+  return {
+    total,
+    cash,
+    invested,
+    investedPercent: total > 0 ? (invested / total) * 100 : 0,
+    holdingsCount: summary.holdingsCount,
+    accountsCount: summary.accountCount,
+    currencySplit: summary.currencySplit.map((split) => ({
+      currency: split.currency,
+      value: num(split.valueBase),
+      percentage: split.percentage,
+    })),
+    cashCurrencySplit: summary.cashCurrencySplit.map((split) => ({
+      currency: split.currency,
+      value: num(split.valueLocal ?? split.valueBase),
+      percentage: split.percentage,
+    })),
+  };
+}
+
 /** A node in the breakdown tree — supports nested taxonomies (parent → children → leaves). */
 export interface BreakdownNode {
   id: string;
@@ -248,7 +274,10 @@ export function accountTreeWeights(
   for (const v of valuations) {
     const account = accountMap.get(v.accountId);
     if (!account) continue;
-    const value = num(v.totalValue) * (num(v.fxRateToBase) || 1);
+    const value =
+      v.totalValueBase != null
+        ? num(v.totalValueBase)
+        : num(v.totalValue) * (num(v.fxRateToBase) || 1);
     if (value <= 0) continue;
     total += value;
     const key = account.group || account.name;

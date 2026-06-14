@@ -13,7 +13,12 @@ use wealthfolio_connect::{
     ensure_valid_access_token, BrokerSyncServiceTrait, TokenLifecycleConfig, TokenLifecycleState,
 };
 use wealthfolio_core::{
-    assets::AssetServiceTrait, events::DomainEvent, goals::GoalServiceTrait, secrets::SecretStore,
+    assets::AssetServiceTrait,
+    events::DomainEvent,
+    goals::GoalServiceTrait,
+    portfolio::valuation::CurrentAccountValuationService,
+    secrets::SecretStore,
+    utils::time_utils::{parse_user_timezone_or_default, user_today},
 };
 
 use super::planner::{
@@ -36,12 +41,15 @@ pub struct QueueWorkerDeps {
     // a callback or restructure slightly. For now, we'll store what we need.
     pub snapshot_service:
         Arc<dyn wealthfolio_core::portfolio::snapshot::SnapshotServiceTrait + Send + Sync>,
+    pub snapshot_repository:
+        Arc<dyn wealthfolio_core::portfolio::snapshot::SnapshotRepositoryTrait + Send + Sync>,
     pub quote_service: Arc<dyn wealthfolio_core::quotes::QuoteServiceTrait + Send + Sync>,
     pub valuation_service:
         Arc<dyn wealthfolio_core::portfolio::valuation::ValuationServiceTrait + Send + Sync>,
     pub account_service: Arc<wealthfolio_core::accounts::AccountService>,
     pub goal_service: Arc<dyn GoalServiceTrait + Send + Sync>,
     pub fx_service: Arc<dyn wealthfolio_core::fx::FxServiceTrait + Send + Sync>,
+    pub base_currency: Arc<RwLock<String>>,
     pub timezone: Arc<RwLock<String>>,
     /// Secret store for accessing credentials (e.g., refresh tokens for broker sync)
     pub secret_store: Arc<dyn SecretStore>,
@@ -512,11 +520,31 @@ async fn refresh_all_goal_summaries(deps: Arc<QueueWorkerDeps>) {
         }
     };
     let account_ids: Vec<String> = accounts.into_iter().map(|account| account.id).collect();
-    let valuations = match deps.valuation_service.get_latest_valuations(&account_ids) {
-        Ok(valuations) => valuations,
+    let base_currency = deps.base_currency.read().unwrap().clone();
+    let timezone = deps.timezone.read().unwrap().clone();
+    let today = user_today(parse_user_timezone_or_default(&timezone));
+    let latest_snapshot_cutoff = today.succ_opt().unwrap_or(today);
+    let service = CurrentAccountValuationService::new(
+        deps.account_service.as_ref(),
+        deps.snapshot_repository.as_ref(),
+        deps.asset_service.as_ref(),
+        deps.quote_service.as_ref(),
+        deps.fx_service.as_ref(),
+    );
+    let response = match service
+        .get_current_valuation_for_scope(
+            "all",
+            &account_ids,
+            &base_currency,
+            latest_snapshot_cutoff,
+            true,
+        )
+        .await
+    {
+        Ok(response) => response,
         Err(err) => {
             tracing::warn!(
-                "Failed to load valuations for goal summary refresh: {}",
+                "Failed to load current valuations for goal summary refresh: {}",
                 err
             );
             return;
@@ -524,7 +552,7 @@ async fn refresh_all_goal_summaries(deps: Arc<QueueWorkerDeps>) {
     };
 
     let mut valuation_map = std::collections::HashMap::new();
-    for valuation in &valuations {
+    for valuation in &response.accounts {
         let Some(value_in_base) = valuation.total_value_base.to_f64() else {
             tracing::warn!(
                 "Skipping goal summary refresh: invalid base valuation total for account {}",

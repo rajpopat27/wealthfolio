@@ -4,11 +4,13 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { calculatePerformanceSummaries } from "@/adapters";
 import { useAccounts } from "@/hooks/use-accounts";
+import { useCurrentAccountValuations } from "@/hooks/use-current-account-valuations";
 import { useLatestValuations } from "@/hooks/use-latest-valuations";
 import { useSettingsContext } from "@/lib/settings-provider";
 import type {
   Account,
   AccountValuation,
+  CurrentAccountValuation,
   PerformanceResult,
   Settings,
   TrackingMode,
@@ -29,6 +31,10 @@ vi.mock("@/hooks/use-accounts", () => ({
 
 vi.mock("@/hooks/use-latest-valuations", () => ({
   useLatestValuations: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-current-account-valuations", () => ({
+  useCurrentAccountValuations: vi.fn(),
 }));
 
 vi.mock("@/lib/settings-provider", () => ({
@@ -85,6 +91,7 @@ vi.mock("@wealthfolio/ui/components/ui/tooltip", () => ({
 const mockCalculatePerformanceSummaries = vi.mocked(calculatePerformanceSummaries);
 const mockUseAccounts = vi.mocked(useAccounts);
 const mockUseLatestValuations = vi.mocked(useLatestValuations);
+const mockUseCurrentAccountValuations = vi.mocked(useCurrentAccountValuations);
 const mockUseSettingsContext = vi.mocked(useSettingsContext);
 const mockUseQuery = vi.mocked(useQuery);
 
@@ -154,6 +161,25 @@ function createValuation(overrides: Partial<AccountValuation>): AccountValuation
   };
 }
 
+function createCurrentValuation(
+  overrides: Partial<CurrentAccountValuation>,
+): CurrentAccountValuation {
+  return {
+    accountId: overrides.accountId ?? "account-1",
+    accountCurrency: overrides.accountCurrency ?? "USD",
+    baseCurrency: overrides.baseCurrency ?? "USD",
+    cashBalance: overrides.cashBalance ?? 0,
+    investmentMarketValue: overrides.investmentMarketValue ?? 0,
+    totalValue: overrides.totalValue ?? 0,
+    cashBalanceBase: overrides.cashBalanceBase ?? overrides.cashBalance ?? 0,
+    investmentMarketValueBase:
+      overrides.investmentMarketValueBase ?? overrides.investmentMarketValue ?? 0,
+    totalValueBase: overrides.totalValueBase ?? overrides.totalValue ?? 0,
+    sourceDataAsOf: overrides.sourceDataAsOf ?? "2026-03-17T11:59:00Z",
+    calculatedAt: overrides.calculatedAt ?? "2026-03-17T12:00:00Z",
+  };
+}
+
 interface PerformanceFixture {
   pnl: number | null;
   returnValue: number | null;
@@ -210,11 +236,13 @@ function createPerformanceResult(
 function renderAccountsSummary({
   accounts,
   valuations,
+  currentValuations,
   performanceByAccountId = {},
   performanceByScopeKey = {},
 }: {
   accounts: Account[];
   valuations: AccountValuation[];
+  currentValuations?: CurrentAccountValuation[];
   performanceByAccountId?: Record<string, PerformanceFixture>;
   performanceByScopeKey?: Record<string, PerformanceFixture>;
 }) {
@@ -240,6 +268,28 @@ function renderAccountsSummary({
   mockUseLatestValuations.mockReturnValue({
     latestValuations: valuations,
     isLoading: false,
+    error: null,
+  });
+
+  const defaultCurrentValuations = valuations.map((valuation) =>
+    createCurrentValuation({
+      accountId: valuation.accountId,
+      accountCurrency: valuation.accountCurrency,
+      baseCurrency: valuation.baseCurrency,
+      cashBalance: valuation.cashBalance,
+      investmentMarketValue: valuation.investmentMarketValue,
+      totalValue: valuation.totalValue,
+      cashBalanceBase: valuation.cashBalanceBase,
+      investmentMarketValueBase: valuation.investmentMarketValueBase,
+      totalValueBase: valuation.totalValueBase,
+      calculatedAt: valuation.calculatedAt,
+    }),
+  );
+
+  mockUseCurrentAccountValuations.mockReturnValue({
+    currentAccountValuations: currentValuations ?? defaultCurrentValuations,
+    isLoading: false,
+    isFetching: false,
     error: null,
   });
 
@@ -367,6 +417,38 @@ describe("AccountsSummary", () => {
     expect(
       within(missingRow as HTMLElement).getByTestId("account-summary-secondary-placeholder"),
     ).toHaveTextContent("-");
+  });
+
+  it("uses current account valuations for displayed account values instead of stale daily valuations", () => {
+    renderAccountsSummary({
+      accounts: [createAccount({ id: "live-account", name: "Live Account" })],
+      valuations: [
+        createValuation({
+          accountId: "live-account",
+          totalValue: 100,
+          totalValueBase: 100,
+        }),
+      ],
+      currentValuations: [
+        createCurrentValuation({
+          accountId: "live-account",
+          totalValue: 125,
+          totalValueBase: 125,
+        }),
+      ],
+      performanceByAccountId: {
+        "live-account": {
+          pnl: 25,
+          returnValue: 0.25,
+        },
+      },
+    });
+
+    const row = screen.getByText("Live Account").closest("a");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("value:USD:125")).toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText("value:USD:100")).not.toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("gain-percent:0.25")).toBeInTheDocument();
   });
 
   it("keeps the group header behavior unchanged when grouped totals have zero gain", async () => {

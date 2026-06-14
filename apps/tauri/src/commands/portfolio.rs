@@ -30,7 +30,11 @@ use wealthfolio_core::{
     },
     portfolios::{AccountScope, ResolvedAccountScope},
     quotes::MarketSyncMode,
-    valuation::DailyAccountValuation,
+    utils::time_utils::{parse_user_timezone_or_default, user_today},
+    valuation::{
+        CurrentAccountValuation, CurrentAccountValuationService, CurrentValuationResponse,
+        DailyAccountValuation,
+    },
 };
 
 // ============================================================================
@@ -249,6 +253,35 @@ async fn resolve_scope(
         .portfolio_service()
         .resolve_account_scope(filter, &base_currency)
         .map_err(|e| e.to_string())
+}
+
+async fn resolve_current_valuation_scope(
+    filter: &AccountScope,
+    state: &ServiceContext,
+) -> Result<ResolvedAccountScope, String> {
+    let base_currency = state.get_base_currency();
+    let resolved = state
+        .portfolio_service()
+        .resolve_account_scope(filter, &base_currency)
+        .map_err(|e| e.to_string())?;
+
+    let account_ids = match filter {
+        AccountScope::Account { account_id } => vec![account_id.clone()],
+        AccountScope::Accounts { account_ids } => unique_account_ids(account_ids.clone()),
+        AccountScope::Portfolio { portfolio_id } => {
+            state
+                .portfolio_service()
+                .get_portfolio(portfolio_id)
+                .map_err(|e| e.to_string())?
+                .account_ids
+        }
+        AccountScope::All => resolved.account_ids.clone(),
+    };
+
+    Ok(ResolvedAccountScope {
+        account_ids,
+        ..resolved
+    })
 }
 
 #[tauri::command]
@@ -514,6 +547,78 @@ pub async fn get_latest_valuations(
     state
         .valuation_service()
         .get_latest_valuations(&ids_to_process)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_current_account_valuations(
+    state: State<'_, Arc<ServiceContext>>,
+    account_ids: Vec<String>,
+) -> Result<Vec<CurrentAccountValuation>, String> {
+    debug!(
+        "Get current account valuations for accounts: {:?}",
+        account_ids
+    );
+
+    let base_currency = state.get_base_currency();
+    let timezone = state.get_timezone();
+    let today = user_today(parse_user_timezone_or_default(&timezone));
+    let latest_snapshot_cutoff = today.succ_opt().unwrap_or(today);
+    let account_service = state.account_service();
+    let snapshot_repository = state.snapshot_repository();
+    let asset_service = state.asset_service();
+    let quote_service = state.quote_service();
+    let fx_service = state.fx_service();
+    let service = CurrentAccountValuationService::new(
+        account_service.as_ref(),
+        snapshot_repository.as_ref(),
+        asset_service.as_ref(),
+        quote_service.as_ref(),
+        fx_service.as_ref(),
+    );
+
+    service
+        .get_current_account_valuations(&account_ids, &base_currency, latest_snapshot_cutoff)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_current_valuation(
+    state: State<'_, Arc<ServiceContext>>,
+    filter: AccountScopeInput,
+    include_accounts: Option<bool>,
+) -> Result<CurrentValuationResponse, String> {
+    debug!("Get scoped current valuation...");
+
+    let base_currency = state.get_base_currency();
+    let timezone = state.get_timezone();
+    let today = user_today(parse_user_timezone_or_default(&timezone));
+    let latest_snapshot_cutoff = today.succ_opt().unwrap_or(today);
+    let account_filter = filter.into_account_filter()?;
+    let resolved = resolve_current_valuation_scope(&account_filter, &state).await?;
+    let account_service = state.account_service();
+    let snapshot_repository = state.snapshot_repository();
+    let asset_service = state.asset_service();
+    let quote_service = state.quote_service();
+    let fx_service = state.fx_service();
+    let service = CurrentAccountValuationService::new(
+        account_service.as_ref(),
+        snapshot_repository.as_ref(),
+        asset_service.as_ref(),
+        quote_service.as_ref(),
+        fx_service.as_ref(),
+    );
+
+    service
+        .get_current_valuation_for_scope(
+            &resolved.scope_id,
+            &resolved.account_ids,
+            &base_currency,
+            latest_snapshot_cutoff,
+            include_accounts.unwrap_or(false),
+        )
+        .await
         .map_err(|e| e.to_string())
 }
 

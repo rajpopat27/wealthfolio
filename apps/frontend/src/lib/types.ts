@@ -993,6 +993,46 @@ export interface AccountValuation {
   calculatedAt: string;
 }
 
+export interface CurrentAccountValuation {
+  accountId: string;
+  accountCurrency: string;
+  baseCurrency: string;
+  cashBalance: number;
+  investmentMarketValue: number;
+  totalValue: number;
+  cashBalanceBase: number;
+  investmentMarketValueBase: number;
+  totalValueBase: number;
+  sourceDataAsOf: string | null;
+  calculatedAt: string;
+}
+
+export interface CurrentValuationSplit {
+  currency: string;
+  valueBase: number;
+  valueLocal?: number | null;
+  percentage: number;
+}
+
+export interface CurrentValuationSummary {
+  scopeId: string;
+  baseCurrency: string;
+  cashBalanceBase: number;
+  investmentMarketValueBase: number;
+  totalValueBase: number;
+  holdingsCount: number;
+  accountCount: number;
+  currencySplit: CurrentValuationSplit[];
+  cashCurrencySplit: CurrentValuationSplit[];
+  sourceDataAsOf: string | null;
+  calculatedAt: string;
+}
+
+export interface CurrentValuationResponse {
+  summary: CurrentValuationSummary;
+  accounts: CurrentAccountValuation[];
+}
+
 export interface AccountSummaryView {
   accountId: string;
   accountName: string;

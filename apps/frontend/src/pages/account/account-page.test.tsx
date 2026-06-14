@@ -1,0 +1,430 @@
+import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useQuery } from "@tanstack/react-query";
+import { getHoldings } from "@/adapters";
+import { useAccounts } from "@/hooks/use-accounts";
+import { useRecalculatePortfolioMutation } from "@/hooks/use-calculate-portfolio";
+import { useCurrentValuation } from "@/hooks/use-current-account-valuations";
+import { useValuationHistory } from "@/hooks/use-valuation-history";
+import { useSettingsContext } from "@/lib/settings-provider";
+import type {
+  Account,
+  AccountValuation,
+  CurrentAccountValuation,
+  Holding,
+  PerformanceResult,
+  Settings,
+} from "@/lib/types";
+import { AccountType } from "@/lib/types";
+import { useCalculatePerformanceHistory } from "@/pages/performance/hooks/use-performance-data";
+import AccountPage from "./account-page";
+
+vi.mock("@/adapters", () => ({
+  getHoldings: vi.fn(),
+  getSnapshots: vi.fn(),
+  searchActivities: vi.fn(),
+}));
+
+vi.mock("@/components/action-palette", () => ({
+  ActionPalette: () => <div>action-palette</div>,
+}));
+
+vi.mock("@/components/history-chart", () => ({
+  HistoryChart: () => <div>history-chart</div>,
+}));
+
+vi.mock("@/components/privacy-toggle", () => ({
+  PrivacyToggle: () => <button>privacy-toggle</button>,
+}));
+
+vi.mock("@/hooks/use-accounts", () => ({
+  useAccounts: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-calculate-portfolio", () => ({
+  useRecalculatePortfolioMutation: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-current-account-valuations", () => ({
+  useCurrentValuation: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-valuation-history", () => ({
+  useValuationHistory: vi.fn(),
+}));
+
+vi.mock("@/lib/settings-provider", () => ({
+  useSettingsContext: vi.fn(),
+}));
+
+vi.mock("@/pages/activity/components/activity-date-sheet", () => ({
+  ActivityDateSheet: () => <div>activity-date-sheet</div>,
+}));
+
+vi.mock("@/pages/activity/components/forms/bulk-holdings-modal", () => ({
+  BulkHoldingsModal: () => <div>bulk-holdings-modal</div>,
+}));
+
+vi.mock("@/pages/dashboard/portfolio-update-trigger", () => ({
+  PortfolioUpdateTrigger: ({
+    children,
+    lastCalculatedAt,
+  }: {
+    children: React.ReactNode;
+    lastCalculatedAt?: string;
+  }) => (
+    <div>
+      <div data-testid="account-as-of">{lastCalculatedAt ?? ""}</div>
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock("@/pages/holdings/components/holdings-edit-mode", () => ({
+  HoldingsEditMode: () => <div>holdings-edit-mode</div>,
+}));
+
+vi.mock("@/pages/performance/hooks/use-performance-data", () => ({
+  useCalculatePerformanceHistory: vi.fn(),
+}));
+
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: vi.fn(),
+}));
+
+vi.mock("@wealthfolio/ui", () => {
+  const Icon = () => <span>icon</span>;
+  const Passthrough = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
+
+  return {
+    AnimatedToggleGroup: () => <div>toggle-group</div>,
+    Card: Passthrough,
+    CardContent: Passthrough,
+    CardHeader: Passthrough,
+    CardTitle: Passthrough,
+    GainAmount: ({ value }: { value: number }) => <span>{`gain-amount:${value}`}</span>,
+    GainPercent: ({ value }: { value: number }) => <span>{`gain-percent:${value}`}</span>,
+    Icons: {
+      Activity: Icon,
+      Bitcoin: Icon,
+      Briefcase: Icon,
+      Check: Icon,
+      ChevronDown: Icon,
+      Clock: Icon,
+      CreditCard: Icon,
+      DollarSign: Icon,
+      History: Icon,
+      Holdings: Icon,
+      Import: Icon,
+      Pencil: Icon,
+      Plus: Icon,
+    },
+    IntervalSelector: () => <div>interval-selector</div>,
+    Page: Passthrough,
+    PageContent: Passthrough,
+    PageHeader: ({ children }: { children?: React.ReactNode }) => <header>{children}</header>,
+    PrivacyAmount: ({ value, currency }: { value: number; currency: string }) => (
+      <span>{`value:${currency}:${value}`}</span>
+    ),
+    Skeleton: () => <div>loading</div>,
+    Tooltip: Passthrough,
+    TooltipContent: Passthrough,
+    TooltipProvider: Passthrough,
+    TooltipTrigger: Passthrough,
+  };
+});
+
+vi.mock("@wealthfolio/ui/components/ui/button", () => ({
+  Button: ({
+    children,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { children?: React.ReactNode }) => (
+    <button {...props}>{children}</button>
+  ),
+}));
+
+vi.mock("@wealthfolio/ui/components/ui/command", () => ({
+  Command: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  CommandEmpty: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  CommandGroup: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  CommandInput: () => <input aria-label="command-input" />,
+  CommandItem: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  CommandList: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock("@wealthfolio/ui/components/ui/popover", () => ({
+  Popover: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  PopoverContent: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  PopoverTrigger: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+}));
+
+vi.mock("@wealthfolio/ui/components/ui/scroll-area", () => ({
+  ScrollArea: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock("@wealthfolio/ui/components/ui/sheet", () => ({
+  Sheet: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  SheetContent: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  SheetDescription: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  SheetHeader: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  SheetTitle: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  SheetTrigger: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+}));
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+    useParams: () => ({ id: "account-1" }),
+  };
+});
+
+vi.mock("./account-contribution-limit", () => ({
+  AccountContributionLimit: () => <div>contribution-limit</div>,
+}));
+
+vi.mock("./account-holdings", () => ({
+  default: () => <div>account-holdings</div>,
+}));
+
+vi.mock("./account-metrics", () => ({
+  default: () => <div>account-metrics</div>,
+}));
+
+vi.mock("./account-snapshot-history", () => ({
+  default: () => <div>snapshot-history</div>,
+}));
+
+const mockUseAccounts = vi.mocked(useAccounts);
+const mockUseCurrentValuation = vi.mocked(useCurrentValuation);
+const mockUseValuationHistory = vi.mocked(useValuationHistory);
+const mockUseSettingsContext = vi.mocked(useSettingsContext);
+const mockUseCalculatePerformanceHistory = vi.mocked(useCalculatePerformanceHistory);
+const mockUseQuery = vi.mocked(useQuery);
+const mockUseRecalculatePortfolioMutation = vi.mocked(useRecalculatePortfolioMutation);
+
+describe("AccountPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockUseSettingsContext.mockReturnValue({
+      settings: createSettings(),
+    } as unknown as ReturnType<typeof useSettingsContext>);
+
+    mockUseAccounts.mockReturnValue({
+      accounts: [createAccount()],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAccounts>);
+
+    mockUseRecalculatePortfolioMutation.mockReturnValue({
+      mutate: vi.fn(),
+    } as unknown as ReturnType<typeof useRecalculatePortfolioMutation>);
+
+    mockUseCalculatePerformanceHistory.mockReturnValue({
+      data: [createPerformanceResult()],
+      isLoading: false,
+      hasErrors: false,
+      errorMessages: [],
+    } as unknown as ReturnType<typeof useCalculatePerformanceHistory>);
+
+    mockUseQuery.mockImplementation((options: unknown) => {
+      const queryKey = (options as { queryKey?: unknown[] })?.queryKey;
+      if (Array.isArray(queryKey) && queryKey[0] === "holdings") {
+        return {
+          data: [createCashHolding()],
+          isLoading: false,
+          error: null,
+        } as ReturnType<typeof useQuery>;
+      }
+
+      return {
+        data: [],
+        isLoading: false,
+        error: null,
+      } as ReturnType<typeof useQuery>;
+    });
+
+    vi.mocked(getHoldings).mockResolvedValue([createCashHolding()]);
+  });
+
+  it("displays live current account valuation instead of stale historical valuation", () => {
+    mockUseValuationHistory.mockReturnValue({
+      valuationHistory: [createHistoricalValuation({ totalValue: 100 })],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useValuationHistory>);
+    mockUseCurrentValuation.mockReturnValue({
+      currentValuation: {
+        summary: createCurrentSummary({ totalValueBase: 125 }),
+        accounts: [createCurrentAccountValuation({ totalValue: 125 })],
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    } as unknown as ReturnType<typeof useCurrentValuation>);
+
+    render(<AccountPage />);
+
+    expect(screen.getByText("value:USD:125")).toBeInTheDocument();
+    expect(screen.queryByText("value:USD:100")).not.toBeInTheDocument();
+  });
+
+  it("does not use stale historical timestamp when live current valuation has no source data", () => {
+    mockUseValuationHistory.mockReturnValue({
+      valuationHistory: [
+        createHistoricalValuation({
+          totalValue: 100,
+          calculatedAt: "2026-03-17T10:00:00Z",
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useValuationHistory>);
+    mockUseCurrentValuation.mockReturnValue({
+      currentValuation: {
+        summary: createCurrentSummary({ sourceDataAsOf: null }),
+        accounts: [createCurrentAccountValuation({ sourceDataAsOf: null, totalValue: 0 })],
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    } as unknown as ReturnType<typeof useCurrentValuation>);
+
+    render(<AccountPage />);
+
+    expect(screen.getByTestId("account-as-of")).toHaveTextContent("");
+  });
+});
+
+function createSettings(): Settings {
+  return {
+    theme: "light",
+    font: "font-sans",
+    baseCurrency: "USD",
+    defaultReturnMetric: "twr",
+    timezone: "America/Chicago",
+    instanceId: "test-instance",
+    onboardingCompleted: true,
+    autoUpdateCheckEnabled: true,
+    menuBarVisible: true,
+    syncEnabled: false,
+  };
+}
+
+function createAccount(): Account {
+  return {
+    id: "account-1",
+    name: "Brokerage",
+    accountType: AccountType.SECURITIES,
+    group: "Investments",
+    balance: 0,
+    currency: "USD",
+    isDefault: false,
+    isActive: true,
+    isArchived: false,
+    trackingMode: "TRANSACTIONS",
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+  };
+}
+
+function createCashHolding(): Holding {
+  return {
+    id: "USD",
+    accountId: "account-1",
+    holdingType: "cash",
+    quantity: 1,
+    marketValue: { local: 1, base: 1 },
+  } as Holding;
+}
+
+function createHistoricalValuation(overrides: Partial<AccountValuation> = {}): AccountValuation {
+  const id = overrides.id ?? "valuation-1";
+  return {
+    accountId: "account-1",
+    valuationDate: "2026-03-17",
+    accountCurrency: "USD",
+    baseCurrency: "USD",
+    fxRateToBase: 1,
+    cashBalance: 0,
+    investmentMarketValue: overrides.totalValue ?? 100,
+    totalValue: overrides.totalValue ?? 100,
+    costBasis: 0,
+    netContribution: 0,
+    cashBalanceBase: 0,
+    investmentMarketValueBase: overrides.totalValueBase ?? overrides.totalValue ?? 100,
+    totalValueBase: overrides.totalValueBase ?? overrides.totalValue ?? 100,
+    costBasisBase: 0,
+    netContributionBase: 0,
+    externalInflowBase: 0,
+    externalOutflowBase: 0,
+    externalFlowSource: "UNKNOWN",
+    performanceEligibleValueBase: overrides.totalValueBase ?? overrides.totalValue ?? 100,
+    calculatedAt: overrides.calculatedAt ?? "2026-03-17T10:00:00Z",
+    ...overrides,
+    id,
+  };
+}
+
+function createCurrentAccountValuation(
+  overrides: Partial<CurrentAccountValuation> = {},
+): CurrentAccountValuation {
+  return {
+    accountId: "account-1",
+    accountCurrency: "USD",
+    baseCurrency: "USD",
+    cashBalance: 0,
+    investmentMarketValue: overrides.totalValue ?? 125,
+    totalValue: overrides.totalValue ?? 125,
+    cashBalanceBase: 0,
+    investmentMarketValueBase: overrides.totalValueBase ?? overrides.totalValue ?? 125,
+    totalValueBase: overrides.totalValueBase ?? overrides.totalValue ?? 125,
+    sourceDataAsOf: overrides.sourceDataAsOf ?? "2026-03-17T12:00:00Z",
+    calculatedAt: "2026-03-17T12:05:00Z",
+    ...overrides,
+  };
+}
+
+function createCurrentSummary(overrides: {
+  totalValueBase?: number;
+  sourceDataAsOf?: string | null;
+}) {
+  const totalValueBase = overrides.totalValueBase ?? 125;
+  return {
+    scopeId: "account:account-1",
+    baseCurrency: "USD",
+    cashBalanceBase: 0,
+    investmentMarketValueBase: totalValueBase,
+    totalValueBase,
+    holdingsCount: 1,
+    accountCount: 1,
+    currencySplit: [],
+    cashCurrencySplit: [],
+    sourceDataAsOf: overrides.sourceDataAsOf ?? "2026-03-17T12:00:00Z",
+    calculatedAt: "2026-03-17T12:05:00Z",
+  };
+}
+
+function createPerformanceResult(): PerformanceResult {
+  return {
+    scope: { id: "account-1", currency: "USD" },
+    mode: "valueReturn",
+    returns: { valueReturn: null },
+    attribution: {
+      contributions: 0,
+      distributions: 0,
+      income: 0,
+      realizedPnl: 0,
+      unrealizedPnlChange: 0,
+      fxEffect: 0,
+      fees: 0,
+      taxes: 0,
+      residual: 0,
+    },
+    risk: {},
+    dataQuality: { status: "ok", warnings: [] },
+    series: [],
+    period: { startDate: null, endDate: null },
+  };
+}
