@@ -29,7 +29,7 @@ use wealthfolio_core::activities::{
 };
 use wealthfolio_core::assets::{
     build_option_metadata, parse_crypto_pair_symbol, parse_symbol_with_exchange_suffix,
-    AssetServiceTrait, AssetSpec, InstrumentType,
+    AssetServiceTrait, AssetSpec, InstrumentType, QuoteMode,
 };
 use wealthfolio_core::errors::Result;
 use wealthfolio_core::events::{DomainEvent, DomainEventSink, NoOpDomainEventSink};
@@ -744,6 +744,7 @@ impl BrokerSyncServiceTrait for BrokerSyncService {
                 .unwrap_or_else(|| account_currency.clone());
             let position_currency = normalize_currency_code(&raw_quote_currency).to_string();
 
+            let is_mutual_fund = is_broker_mutual_fund(symbol_type_code.as_deref());
             let instrument_type =
                 map_broker_symbol_type(symbol_type_code.as_deref(), is_crypto_asset);
 
@@ -751,6 +752,11 @@ impl BrokerSyncServiceTrait for BrokerSyncService {
 
             let spec = AssetSpec {
                 name: asset_name,
+                quote_mode: if is_mutual_fund {
+                    Some(QuoteMode::Manual)
+                } else {
+                    None
+                },
                 ..AssetSpec::market_instrument(
                     symbol.clone(),
                     symbol.clone(),
@@ -929,6 +935,26 @@ impl BrokerSyncServiceTrait for BrokerSyncService {
                     spec_key_to_asset_id.insert(spec_key.clone(), asset_id.clone());
                 }
             }
+        }
+
+        for (spec_key, idx) in &spec_key_to_idx {
+            let spec = &asset_specs[*idx];
+            if spec.quote_mode != Some(QuoteMode::Manual) {
+                continue;
+            }
+            let Some(asset_id) = spec_key_to_asset_id.get(spec_key) else {
+                continue;
+            };
+            if ensure_result
+                .assets
+                .get(asset_id)
+                .is_some_and(|asset| asset.quote_mode == QuoteMode::Manual)
+            {
+                continue;
+            }
+            self.asset_service
+                .update_quote_mode_silent(asset_id, QuoteMode::Manual.as_db_str())
+                .await?;
         }
 
         // 3b. Create quotes from broker-provided prices
@@ -1472,6 +1498,13 @@ fn map_broker_symbol_type(code: Option<&str>, is_crypto_fallback: bool) -> Instr
     }
 }
 
+fn is_broker_mutual_fund(code: Option<&str>) -> bool {
+    matches!(
+        code.map(|c| c.trim().to_lowercase()).as_deref(),
+        Some("mutualfund" | "mutual_fund" | "mutual fund" | "oef")
+    )
+}
+
 fn default_tracking_mode_for_broker_account_type(account_type: &str) -> TrackingMode {
     if account_type == account_types::CREDIT_CARD {
         TrackingMode::Transactions
@@ -1490,7 +1523,8 @@ mod tests {
     use wealthfolio_core::portfolio::snapshot::{AccountStateSnapshot, Position, SnapshotSource};
 
     use super::{
-        default_tracking_mode_for_broker_account_type, normalize_holdings_money, BrokerSyncService,
+        default_tracking_mode_for_broker_account_type, is_broker_mutual_fund,
+        normalize_holdings_money, BrokerSyncService,
     };
     use wealthfolio_core::accounts::{account_types, TrackingMode};
     use wealthfolio_core::assets::{AssetSpec, InstrumentType};
@@ -1618,6 +1652,16 @@ mod tests {
             default_tracking_mode_for_broker_account_type(account_types::SECURITIES),
             TrackingMode::Holdings
         );
+    }
+
+    #[test]
+    fn broker_mutual_fund_codes_are_manual_priced() {
+        assert!(is_broker_mutual_fund(Some("MUTUALFUND")));
+        assert!(is_broker_mutual_fund(Some("mutual_fund")));
+        assert!(is_broker_mutual_fund(Some("oef")));
+        assert!(!is_broker_mutual_fund(Some("cef")));
+        assert!(!is_broker_mutual_fund(Some("EQUITY")));
+        assert!(!is_broker_mutual_fund(None));
     }
 
     #[test]
