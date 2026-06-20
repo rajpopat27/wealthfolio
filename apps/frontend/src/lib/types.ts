@@ -571,6 +571,17 @@ export interface ImportValidationResult {
   };
 }
 
+export type ImportActivityRowStatus = "created" | "duplicate" | "skipped";
+
+export interface ImportActivityRowMapping {
+  clientImportId?: string;
+  lineNumber?: number;
+  status: ImportActivityRowStatus;
+  activityId?: string;
+  duplicateOfId?: string;
+  message?: string;
+}
+
 /**
  * Result of importing activities, includes import run metadata
  */
@@ -581,6 +592,8 @@ export interface ImportActivitiesResult {
   importRunId: string;
   /** Summary statistics for the import */
   summary: ImportActivitiesSummary;
+  /** Per-input-row status for add-on follow-up actions */
+  rowMappings: ImportActivityRowMapping[];
 }
 
 /**

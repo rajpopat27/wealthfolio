@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use wealthfolio_core::activities::ActivityRepositoryTrait;
+use wealthfolio_core::activities::{Activity, ActivityRepositoryTrait};
 
 use super::matcher::{compile_regex_pattern, compile_rules, match_compiled, MAX_REGEX_PATTERN_LEN};
 use super::model::{
@@ -29,6 +30,14 @@ pub struct CategorizationRulesService {
     /// only forces reruns to complete-or-wait, so a manual write that lands
     /// during a rerun is sequenced after the rerun's transaction.
     rerun_lock: Arc<Mutex<()>>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleApplicationResult {
+    pub matched: usize,
+    pub assigned: usize,
+    pub skipped: usize,
 }
 
 impl CategorizationRulesService {
@@ -115,7 +124,36 @@ impl CategorizationRulesService {
             .activity_repo
             .get_activities_by_account_ids(account_ids)
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        Ok(self
+            .apply_rules_to_activities(activities, only_uncategorized)
+            .await?
+            .matched)
+    }
 
+    /// Apply existing rules to explicit activities. Used by add-ons after an
+    /// import so only newly created rows are touched.
+    pub async fn apply_to_activities(
+        &self,
+        activity_ids: &[String],
+        only_uncategorized: bool,
+    ) -> Result<RuleApplicationResult> {
+        if activity_ids.is_empty() {
+            return Ok(RuleApplicationResult::default());
+        }
+        let _guard = self.rerun_lock.lock().await;
+        let activities = self
+            .activity_repo
+            .get_activities_by_ids(activity_ids)
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        self.apply_rules_to_activities(activities, only_uncategorized)
+            .await
+    }
+
+    async fn apply_rules_to_activities(
+        &self,
+        activities: Vec<Activity>,
+        only_uncategorized: bool,
+    ) -> Result<RuleApplicationResult> {
         let ids: Vec<String> = activities.iter().map(|a| a.id.clone()).collect();
         let assignments = self.assignment_service.list_for_activities(&ids).await?;
 
@@ -180,10 +218,15 @@ impl CategorizationRulesService {
             }
         }
 
-        self.assignment_service
+        let assigned = self
+            .assignment_service
             .bulk_apply_rule_assignments(writes, only_uncategorized)
             .await?;
-        Ok(matched_count)
+        Ok(RuleApplicationResult {
+            matched: matched_count,
+            assigned: assigned.len(),
+            skipped: matched_count.saturating_sub(assigned.len()),
+        })
     }
 
     /// List the bundled presets, marking which ones the user already has installed
@@ -952,6 +995,42 @@ mod tests {
             writes.is_empty(),
             "manual same-taxonomy must block the rule"
         );
+    }
+
+    #[tokio::test]
+    async fn apply_to_activities_only_targets_requested_ids() {
+        let rule = mk_rule("r1", "AMAZON", "spending_categories", "cat_food", 10);
+        let rules_repo = Arc::new(MockRulesRepo {
+            rules: Mutex::new(vec![rule]),
+        });
+        let assignment_repo = Arc::new(MockAssignmentRepo::default());
+        let activity_repo = Arc::new(MockActivityRepo {
+            activities: vec![
+                mk_activity("act1", "acct1", "AMAZON ORDER #123"),
+                mk_activity("act2", "acct1", "AMAZON ORDER #456"),
+            ],
+        });
+        let assignment_service = Arc::new(ActivityTaxonomyAssignmentService::new(
+            assignment_repo.clone() as Arc<dyn ActivityTaxonomyAssignmentRepositoryTrait>,
+        ));
+        let svc = CategorizationRulesService::new(
+            rules_repo as Arc<dyn CategorizationRulesRepositoryTrait>,
+            activity_repo as Arc<dyn ActivityRepositoryTrait>,
+            assignment_service,
+        );
+
+        let result = svc
+            .apply_to_activities(&["act2".to_string()], true)
+            .await
+            .unwrap();
+
+        assert_eq!(result.matched, 1);
+        assert_eq!(result.assigned, 1);
+        assert_eq!(result.skipped, 0);
+
+        let writes = assignment_repo.writes.lock().unwrap();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].activity_id, "act2");
     }
 
     #[tokio::test]

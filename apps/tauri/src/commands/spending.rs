@@ -19,7 +19,7 @@ use wealthfolio_spending::cash_activities::{
 };
 use wealthfolio_spending::categorization_rules::{
     CategorizationRule, CategorizationRulesService, ImportPresetResult, NewCategorizationRule,
-    RemovePresetResult, RulePresetSummary, UpdateCategorizationRule,
+    RemovePresetResult, RuleApplicationResult, RulePresetSummary, UpdateCategorizationRule,
 };
 use wealthfolio_spending::events::{Event, EventType, NewEvent, NewEventType, UpdateEvent};
 use wealthfolio_spending::insight::{SpendingInsight, SpendingInsightRequest};
@@ -307,6 +307,27 @@ pub async fn rerun_categorization_rules(
         .rerun_all(&s.account_ids, only_uncategorized)
         .await
         .map_err(|e| format!("Failed to re-run rules: {}", e))
+}
+
+#[tauri::command]
+pub async fn apply_categorization_rules_to_activities(
+    activity_ids: Vec<String>,
+    only_uncategorized: bool,
+    state: State<'_, Arc<ServiceContext>>,
+) -> Result<RuleApplicationResult, String> {
+    let s = state
+        .spending_settings_service()
+        .get()
+        .await
+        .map_err(|e| format!("Failed to load spending settings: {}", e))?;
+    if !s.enabled {
+        return Ok(RuleApplicationResult::default());
+    }
+    state
+        .categorization_rules_service()
+        .apply_to_activities(&activity_ids, only_uncategorized)
+        .await
+        .map_err(|e| format!("Failed to apply rules: {}", e))
 }
 
 #[tauri::command]

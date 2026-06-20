@@ -97,6 +97,14 @@ export * from "../shared/goals";
 // Taxonomy Commands
 export * from "../shared/taxonomies";
 
+// Spending Commands
+export {
+  assignActivityCategory,
+  bulkAssignCategories,
+  getActivityAssignments,
+} from "../../features/spending/adapters/cash-activities";
+export { applyCategorizationRulesToActivities } from "../../features/spending/adapters/rules";
+
 // Alternative Assets Commands
 export * from "../shared/alternative-assets";
 

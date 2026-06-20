@@ -37,14 +37,31 @@ import type {
   SymbolSearchResult,
   Settings,
   SimplePerformanceResult,
+  TaxonomyCategory,
+  TaxonomyWithCategories,
+  TransferMatchCandidate,
+  TransferMatchCandidateRequest,
   UpdateAssetProfile,
 } from "@/lib/types";
 import type { HoldingInput } from "@/adapters";
+import type { ActivityTaxonomyAssignment as InternalActivityTaxonomyAssignment } from "@/features/spending/types/cash-activity";
 import type {
+  ActivityTaxonomyAssignment as SDKActivityTaxonomyAssignment,
+  ActivityTaxonomyCategory as SDKActivityTaxonomyCategory,
+  ActivityTaxonomyCategoryList as SDKActivityTaxonomyCategoryList,
+  ActivityTaxonomyId as SDKActivityTaxonomyId,
+  CategoryAssignmentInput as SDKCategoryAssignmentInput,
   Goal as SDKGoal,
   GoalAllocation as SDKGoalAllocation,
   HostAPI as SDKHostAPI,
+  SpendingRuleApplyResult as SDKSpendingRuleApplyResult,
 } from "@wealthfolio/addon-sdk";
+
+const ACTIVITY_TAXONOMY_IDS = {
+  spending: "spending_categories",
+  income: "income_sources",
+  savings: "savings_categories",
+} as const satisfies Record<string, SDKActivityTaxonomyId>;
 
 /**
  * Internal HostAPI interface that matches the actual command function signatures
@@ -148,6 +165,11 @@ export interface InternalHostAPI {
   createActivity(activity: ActivityCreate): Promise<Activity>;
   updateActivity(activity: ActivityUpdate): Promise<Activity>;
   saveActivities(request: ActivityBulkMutationRequest): Promise<ActivityBulkMutationResult>;
+  findTransferMatchCandidates(
+    request: TransferMatchCandidateRequest,
+  ): Promise<TransferMatchCandidate[]>;
+  linkTransferActivities(activityAId: string, activityBId: string): Promise<[Activity, Activity]>;
+  unlinkTransferActivities(activityAId: string, activityBId: string): Promise<[Activity, Activity]>;
 
   // File operations
   openCsvFileDialog(): Promise<null | string | string[]>;
@@ -204,6 +226,22 @@ export interface InternalHostAPI {
   getQueryClient(): unknown;
   invalidateQueries(queryKey: string | string[]): void;
   refetchQueries(queryKey: string | string[]): void;
+
+  // Spending
+  applyCategorizationRulesToActivities(
+    activityIds: string[],
+    onlyUncategorized: boolean,
+  ): Promise<SDKSpendingRuleApplyResult>;
+  getTaxonomy(id: string): Promise<TaxonomyWithCategories | null>;
+  getActivityAssignments(activityId: string): Promise<InternalActivityTaxonomyAssignment[]>;
+  assignActivityCategory(
+    activityId: string,
+    taxonomyId: string,
+    categoryId: string,
+  ): Promise<InternalActivityTaxonomyAssignment>;
+  bulkAssignCategories(
+    items: SDKCategoryAssignmentInput[],
+  ): Promise<InternalActivityTaxonomyAssignment[]>;
 
   // Toast functions
   toastSuccess(message: string): void;
@@ -309,6 +347,48 @@ export function createSDKHostAPIBridge(
     );
   };
 
+  const toSDKActivityCategory = (
+    category: TaxonomyCategory,
+    fallbackTaxonomyId: SDKActivityTaxonomyId,
+  ): SDKActivityTaxonomyCategory => ({
+    id: category.id,
+    taxonomyId: (category.taxonomyId || fallbackTaxonomyId) as SDKActivityTaxonomyId,
+    name: category.name,
+    parentId: category.parentId ?? null,
+    color: category.color ?? null,
+    icon: category.icon ?? null,
+  });
+
+  const getActivityCategories = async (): Promise<SDKActivityTaxonomyCategoryList> => {
+    const [spending, income, savings] = await Promise.all([
+      internalAPI.getTaxonomy(ACTIVITY_TAXONOMY_IDS.spending),
+      internalAPI.getTaxonomy(ACTIVITY_TAXONOMY_IDS.income),
+      internalAPI.getTaxonomy(ACTIVITY_TAXONOMY_IDS.savings),
+    ]);
+
+    return {
+      spending: (spending?.categories ?? []).map((category) =>
+        toSDKActivityCategory(category, ACTIVITY_TAXONOMY_IDS.spending),
+      ),
+      income: (income?.categories ?? []).map((category) =>
+        toSDKActivityCategory(category, ACTIVITY_TAXONOMY_IDS.income),
+      ),
+      savings: (savings?.categories ?? []).map((category) =>
+        toSDKActivityCategory(category, ACTIVITY_TAXONOMY_IDS.savings),
+      ),
+    };
+  };
+
+  const toSDKActivityAssignment = (
+    assignment: InternalActivityTaxonomyAssignment,
+  ): SDKActivityTaxonomyAssignment => ({
+    id: assignment.id,
+    activityId: assignment.activityId,
+    taxonomyId: assignment.taxonomyId as SDKActivityTaxonomyId,
+    categoryId: assignment.categoryId,
+    source: assignment.source,
+  });
+
   return {
     accounts: {
       getAll: internalAPI.getAccounts,
@@ -337,6 +417,9 @@ export function createSDKHostAPIBridge(
         internalAPI.checkActivitiesImport({ activities }),
       getImportMapping: internalAPI.getAccountImportMapping,
       saveImportMapping: internalAPI.saveAccountImportMapping,
+      findTransferMatchCandidates: internalAPI.findTransferMatchCandidates,
+      linkTransferActivities: internalAPI.linkTransferActivities,
+      unlinkTransferActivities: internalAPI.unlinkTransferActivities,
     },
     market: {
       searchTicker: internalAPI.searchTicker,
@@ -395,6 +478,29 @@ export function createSDKHostAPIBridge(
       checkImport: internalAPI.checkHoldingsImport,
       importSnapshots: internalAPI.importHoldingsCsv,
       delete: internalAPI.deleteSnapshot,
+    },
+    spending: {
+      rules: {
+        applyToActivities: ({ activityIds, onlyUncategorized }) =>
+          internalAPI.applyCategorizationRulesToActivities(activityIds, onlyUncategorized),
+      },
+      categories: {
+        list: getActivityCategories,
+        getAssignments: async ({ activityIds }) => {
+          const assignments = await Promise.all(
+            activityIds.map((activityId) => internalAPI.getActivityAssignments(activityId)),
+          );
+          return assignments.flat().map(toSDKActivityAssignment);
+        },
+        assignActivity: ({ activityId, taxonomyId, categoryId }) =>
+          internalAPI
+            .assignActivityCategory(activityId, taxonomyId, categoryId)
+            .then(toSDKActivityAssignment),
+        bulkAssign: (items) =>
+          internalAPI.bulkAssignCategories(items).then((assignments) =>
+            assignments.map(toSDKActivityAssignment),
+          ),
+      },
     },
 
     logger: createAddonLogger(addonId || "unknown-addon"),

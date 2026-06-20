@@ -210,6 +210,7 @@ export const COMMANDS: CommandMap = {
   update_categorization_rule: { method: "PUT", path: "/spending/rules" },
   delete_categorization_rule: { method: "DELETE", path: "/spending/rules" },
   rerun_categorization_rules: { method: "POST", path: "/spending/rules/rerun" },
+  apply_categorization_rules_to_activities: { method: "POST", path: "/spending/rules/apply" },
   list_rule_presets: { method: "GET", path: "/spending/rule-presets" },
   import_rule_preset: { method: "POST", path: "/spending/rule-presets" },
   remove_rule_preset: { method: "DELETE", path: "/spending/rule-presets" },
@@ -1371,6 +1372,14 @@ export const invoke = async <T>(command: string, payload?: Record<string, unknow
     case "rerun_categorization_rules": {
       const { onlyUncategorized } = payload as { onlyUncategorized: boolean };
       body = JSON.stringify({ onlyUncategorized });
+      break;
+    }
+    case "apply_categorization_rules_to_activities": {
+      const { activityIds, onlyUncategorized } = payload as {
+        activityIds: string[];
+        onlyUncategorized: boolean;
+      };
+      body = JSON.stringify({ activityIds, onlyUncategorized });
       break;
     }
     case "import_rule_preset": {

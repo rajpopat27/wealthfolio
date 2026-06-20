@@ -115,6 +115,7 @@ describe("useChatImportSession", () => {
       importRunId: "run-1",
       summary: { success: true, imported: 1 },
       activities: [],
+      rowMappings: [],
     });
     adapterMocks.saveAccountImportMapping.mockResolvedValue(undefined);
     adapterMocks.updateToolResult.mockResolvedValue(undefined);

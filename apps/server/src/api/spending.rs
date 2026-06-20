@@ -23,7 +23,8 @@ use wealthfolio_spending::cash_activities::{
     CashActivity, CashActivityFilter, CashActivitySearchRequest, CashActivitySearchResponse,
 };
 use wealthfolio_spending::categorization_rules::{
-    CategorizationRule, CategorizationRulesService, NewCategorizationRule, UpdateCategorizationRule,
+    CategorizationRule, CategorizationRulesService, NewCategorizationRule, RuleApplicationResult,
+    UpdateCategorizationRule,
 };
 use wealthfolio_spending::events::{Event, EventType, NewEvent, NewEventType, UpdateEvent};
 use wealthfolio_spending::insight::{SpendingInsight, SpendingInsightRequest};
@@ -289,6 +290,14 @@ struct RerunRulesBody {
     only_uncategorized: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApplyRulesToActivitiesBody {
+    activity_ids: Vec<String>,
+    #[serde(default)]
+    only_uncategorized: bool,
+}
+
 async fn rerun_categorization_rules(
     State(state): State<Arc<AppState>>,
     Json(body): Json<RerunRulesBody>,
@@ -301,6 +310,22 @@ async fn rerun_categorization_rules(
         state
             .categorization_rules_service
             .rerun_all(&s.account_ids, body.only_uncategorized)
+            .await?,
+    ))
+}
+
+async fn apply_categorization_rules_to_activities(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ApplyRulesToActivitiesBody>,
+) -> ApiResult<Json<RuleApplicationResult>> {
+    let s = state.spending_settings_service.get().await?;
+    if !s.enabled {
+        return Ok(Json(RuleApplicationResult::default()));
+    }
+    Ok(Json(
+        state
+            .categorization_rules_service
+            .apply_to_activities(&body.activity_ids, body.only_uncategorized)
             .await?,
     ))
 }
@@ -718,6 +743,10 @@ pub fn router() -> Router<Arc<AppState>> {
             put(update_categorization_rule).delete(delete_categorization_rule),
         )
         .route("/spending/rules/rerun", post(rerun_categorization_rules))
+        .route(
+            "/spending/rules/apply",
+            post(apply_categorization_rules_to_activities),
+        )
         .route("/spending/rule-presets", get(list_rule_presets))
         .route(
             "/spending/rule-presets/{preset_id}/import",

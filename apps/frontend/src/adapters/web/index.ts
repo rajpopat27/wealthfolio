@@ -153,6 +153,14 @@ export {
   updateTaxonomy,
 } from "../shared/taxonomies";
 
+// Spending Commands
+export {
+  assignActivityCategory,
+  bulkAssignCategories,
+  getActivityAssignments,
+} from "../../features/spending/adapters/cash-activities";
+export { applyCategorizationRulesToActivities } from "../../features/spending/adapters/rules";
+
 // Portfolio Commands
 export {
   calculateAccountsSimplePerformance,

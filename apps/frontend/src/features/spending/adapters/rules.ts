@@ -10,6 +10,12 @@ import type {
 
 export type { ImportPresetResult, RemovePresetResult, RulePresetSummary } from "../types/rule";
 
+export interface RuleApplicationResult {
+  matched: number;
+  assigned: number;
+  skipped: number;
+}
+
 export const listCategorizationRules = async (): Promise<CategorizationRule[]> => {
   try {
     return await invoke<CategorizationRule[]>("list_categorization_rules");
@@ -56,6 +62,21 @@ export const rerunCategorizationRules = async (onlyUncategorized: boolean): Prom
     return await invoke<number>("rerun_categorization_rules", { onlyUncategorized });
   } catch (e) {
     logger.error("Error re-running activity rules.");
+    throw e;
+  }
+};
+
+export const applyCategorizationRulesToActivities = async (
+  activityIds: string[],
+  onlyUncategorized: boolean,
+): Promise<RuleApplicationResult> => {
+  try {
+    return await invoke<RuleApplicationResult>("apply_categorization_rules_to_activities", {
+      activityIds,
+      onlyUncategorized,
+    });
+  } catch (e) {
+    logger.error("Error applying activity rules.");
     throw e;
   }
 };

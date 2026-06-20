@@ -161,6 +161,7 @@ const decimalLikeSchema = z.union([
 
 export const importActivitySchema = z
   .object({
+    clientImportId: z.string().optional(),
     id: z.string().uuid().optional(),
     accountId: z.string().min(1, { message: "Please select an account." }),
     currency: z.string().optional(),

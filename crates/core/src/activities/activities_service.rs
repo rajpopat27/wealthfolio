@@ -409,6 +409,50 @@ impl ActivityService {
         }
     }
 
+    fn first_import_issue(activity: &ActivityImport) -> Option<String> {
+        activity
+            .errors
+            .as_ref()
+            .into_iter()
+            .chain(activity.warnings.as_ref())
+            .flat_map(|issues| issues.values())
+            .flat_map(|messages| messages.iter())
+            .next()
+            .cloned()
+    }
+
+    fn build_import_row_mappings(
+        ordered: &[Option<ActivityImport>],
+        created_ids_by_index: &HashMap<usize, String>,
+    ) -> Vec<ImportActivityRowMapping> {
+        ordered
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, maybe_activity)| {
+                let activity = maybe_activity.as_ref()?;
+                let activity_id = created_ids_by_index.get(&idx).cloned();
+                let status = if activity_id.is_some() {
+                    ImportActivityRowStatus::Created
+                } else if activity.duplicate_of_id.is_some()
+                    || activity.duplicate_of_line_number.is_some()
+                {
+                    ImportActivityRowStatus::Duplicate
+                } else {
+                    ImportActivityRowStatus::Skipped
+                };
+
+                Some(ImportActivityRowMapping {
+                    client_import_id: activity.client_import_id.clone(),
+                    line_number: activity.line_number,
+                    status,
+                    activity_id,
+                    duplicate_of_id: activity.duplicate_of_id.clone(),
+                    message: Self::first_import_issue(activity),
+                })
+            })
+            .collect()
+    }
+
     fn parse_instrument_type(value: Option<&str>) -> Option<InstrumentType> {
         match value?.trim().to_uppercase().as_str() {
             "EQUITY" | "STOCK" | "ETF" | "MUTUALFUND" | "MUTUAL_FUND" | "INDEX" | "FUTURE"
@@ -4606,6 +4650,7 @@ impl ActivityServiceTrait for ActivityService {
         }
 
         if valid.is_empty() {
+            let row_mappings = Self::build_import_row_mappings(&ordered, &HashMap::new());
             return Ok(ImportActivitiesResult {
                 activities: ordered.into_iter().flatten().collect(),
                 import_run_id: String::new(),
@@ -4618,6 +4663,7 @@ impl ActivityServiceTrait for ActivityService {
                     success: false,
                     error_message: Some("Account is required for all activities.".to_string()),
                 },
+                row_mappings,
             });
         }
 
@@ -4755,6 +4801,7 @@ impl ActivityServiceTrait for ActivityService {
             for (idx, activity) in import_activities_indexed {
                 ordered[idx] = Some(activity);
             }
+            let row_mappings = Self::build_import_row_mappings(&ordered, &HashMap::new());
             return Ok(ImportActivitiesResult {
                 activities: ordered.into_iter().flatten().collect(),
                 import_run_id: String::new(),
@@ -4767,6 +4814,7 @@ impl ActivityServiceTrait for ActivityService {
                     success: false,
                     error_message: Some("Validation errors found in activities.".to_string()),
                 },
+                row_mappings,
             });
         }
 
@@ -4901,6 +4949,24 @@ impl ActivityServiceTrait for ActivityService {
         // leave its counterpart with an orphan source_group_id.
         self.link_imported_transfer_pairs(&insertable_source_slice, &mut insertable_new_activities);
 
+        for activity in &mut insertable_new_activities {
+            let needs_id = activity
+                .id
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default()
+                .is_empty();
+            if needs_id {
+                activity.id = Some(Uuid::new_v4().to_string());
+            }
+        }
+
+        let created_ids_by_index: HashMap<usize, String> = insertable_sources
+            .iter()
+            .zip(insertable_new_activities.iter())
+            .filter_map(|((idx, _), activity)| activity.id.clone().map(|id| (*idx, id)))
+            .collect();
+
         // ── 6. Ensure FX pairs (one batch call) ──────────────────────────────
         let mut fx_pairs: HashSet<(String, String)> = HashSet::new();
         for (new_act, (_, src)) in insertable_new_activities
@@ -5023,6 +5089,7 @@ impl ActivityServiceTrait for ActivityService {
         for (idx, activity) in import_activities_indexed {
             ordered[idx] = Some(activity);
         }
+        let row_mappings = Self::build_import_row_mappings(&ordered, &created_ids_by_index);
 
         Ok(ImportActivitiesResult {
             activities: ordered.into_iter().flatten().collect(),
@@ -5036,6 +5103,7 @@ impl ActivityServiceTrait for ActivityService {
                 success: true,
                 error_message: None,
             },
+            row_mappings,
         })
     }
 
@@ -5930,6 +5998,7 @@ mod reviewed_import_metadata_tests {
         quote_mode: Option<&str>,
     ) -> ActivityImport {
         ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2026-01-01".to_string(),
             symbol: symbol.to_string(),

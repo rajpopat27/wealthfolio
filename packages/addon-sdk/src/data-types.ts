@@ -356,6 +356,7 @@ export interface ActivityBulkMutationResult {
 }
 
 export interface ActivityImport {
+  clientImportId?: string;
   id?: string;
   accountId: string;
   currency?: string;
@@ -403,10 +404,82 @@ export interface ImportActivitiesSummary {
   success: boolean;
 }
 
+export type ImportActivityRowStatus = 'created' | 'duplicate' | 'skipped';
+
+export interface ImportActivityRowMapping {
+  clientImportId?: string;
+  lineNumber?: number;
+  status: ImportActivityRowStatus;
+  activityId?: string;
+  duplicateOfId?: string;
+  message?: string;
+}
+
 export interface ImportActivitiesResult {
   activities: ActivityImport[];
   importRunId: string;
   summary: ImportActivitiesSummary;
+  rowMappings: ImportActivityRowMapping[];
+}
+
+export interface TransferMatchCandidateRequest {
+  activityId: string;
+  windowDays?: number;
+  limit?: number;
+}
+
+export interface TransferMatchCandidate {
+  activity: Activity;
+  matchKind: 'cash' | 'security';
+  confidence: 'high' | 'medium' | 'low';
+  score: number;
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface SpendingRuleApplyRequest {
+  activityIds: string[];
+  onlyUncategorized: boolean;
+}
+
+export interface SpendingRuleApplyResult {
+  matched: number;
+  assigned: number;
+  skipped: number;
+}
+
+export type ActivityTaxonomyId =
+  | 'spending_categories'
+  | 'income_sources'
+  | 'savings_categories';
+
+export interface ActivityTaxonomyCategory {
+  id: string;
+  taxonomyId: ActivityTaxonomyId;
+  name: string;
+  parentId?: string | null;
+  color?: string | null;
+  icon?: string | null;
+}
+
+export interface ActivityTaxonomyCategoryList {
+  spending: ActivityTaxonomyCategory[];
+  income: ActivityTaxonomyCategory[];
+  savings: ActivityTaxonomyCategory[];
+}
+
+export interface CategoryAssignmentInput {
+  activityId: string;
+  taxonomyId: ActivityTaxonomyId;
+  categoryId: string;
+}
+
+export interface ActivityTaxonomyAssignment {
+  id: string;
+  activityId: string;
+  taxonomyId: ActivityTaxonomyId;
+  categoryId: string;
+  source: 'manual' | 'rule' | 'ai' | string;
 }
 
 export interface ImportMappingData {

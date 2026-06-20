@@ -799,6 +799,9 @@ pub struct ActivitySearchResponse {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ActivityImport {
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_import_id: Option<String>,
     pub id: Option<String>,
     pub date: String,
     pub symbol: String,
@@ -1636,6 +1639,31 @@ pub struct ImportActivitiesResult {
     pub import_run_id: String,
     /// Summary statistics for the import
     pub summary: ImportActivitiesSummary,
+    /// Per-input-row status used by add-ons to follow up on created activities only.
+    #[serde(default)]
+    pub row_mappings: Vec<ImportActivityRowMapping>,
+}
+
+/// Import status for one submitted activity row.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum ImportActivityRowStatus {
+    Created,
+    Duplicate,
+    #[default]
+    Skipped,
+}
+
+/// Correlates an import input row with the created activity or skipped state.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportActivityRowMapping {
+    pub client_import_id: Option<String>,
+    pub line_number: Option<i32>,
+    pub status: ImportActivityRowStatus,
+    pub activity_id: Option<String>,
+    pub duplicate_of_id: Option<String>,
+    pub message: Option<String>,
 }
 
 /// Summary statistics for an activity import

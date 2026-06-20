@@ -4659,6 +4659,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "AZN".to_string(),
@@ -4725,6 +4726,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "ZFL".to_string(),
@@ -4820,6 +4822,7 @@ mod tests {
 
         let imports = vec![
             ActivityImport {
+                client_import_id: None,
                 id: None,
                 date: "2024-01-15".to_string(),
                 symbol: "SHOP".to_string(),
@@ -4854,6 +4857,7 @@ mod tests {
                 is_external: None,
             },
             ActivityImport {
+                client_import_id: None,
                 id: None,
                 date: "2024-01-15".to_string(),
                 symbol: "SHOP".to_string(),
@@ -4936,6 +4940,7 @@ mod tests {
         );
 
         let nyse = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "SHOP".to_string(),
@@ -5005,6 +5010,7 @@ mod tests {
         );
 
         let first = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "XAU".to_string(),
@@ -5252,6 +5258,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "AZN".to_string(),
@@ -5325,6 +5332,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "MSF.DE".to_string(),
@@ -5391,6 +5399,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "VOD.L".to_string(),
@@ -5464,6 +5473,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "BRK.B".to_string(),
@@ -5534,6 +5544,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "AZN".to_string(),
@@ -5601,6 +5612,7 @@ mod tests {
 
         // ".XC" suffix resolves to Cboe UK MIC and provider quote currency.
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "VWRPL.XC".to_string(),
@@ -5674,6 +5686,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "CUSTOM".to_string(),
@@ -5755,6 +5768,7 @@ mod tests {
 
         // Import activity for earlier created manual asset without `quote_mode` set
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "CUSTOM".to_string(),
@@ -5826,6 +5840,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "BTC-USD".to_string(),
@@ -5893,6 +5908,7 @@ mod tests {
         );
 
         let unresolved = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "VWRPL.XC".to_string(),
@@ -5966,6 +5982,7 @@ mod tests {
         );
 
         let drip = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: String::new(),
@@ -6035,6 +6052,7 @@ mod tests {
         );
 
         let dividend_in_kind = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: String::new(),
@@ -6104,6 +6122,7 @@ mod tests {
         );
 
         let staking_reward = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "ETH".to_string(),
@@ -6173,6 +6192,7 @@ mod tests {
         );
 
         let mismatched_subtype = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "AAPL".to_string(),
@@ -6239,6 +6259,7 @@ mod tests {
         );
 
         let option_buy = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "AAPL251219C00200000".to_string(),
@@ -6303,6 +6324,7 @@ mod tests {
         );
 
         let cash_dividend = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: String::new(),
@@ -6372,6 +6394,7 @@ mod tests {
         );
 
         let cash_dividend = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: String::new(),
@@ -6450,6 +6473,7 @@ mod tests {
         );
 
         let resolved = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "VWRPL".to_string(),
@@ -6524,6 +6548,7 @@ mod tests {
         let checked = activity_service
             .check_activities_import(vec![
                 ActivityImport {
+                    client_import_id: None,
                     id: None,
                     date: "2026-05-02".to_string(),
                     symbol: String::new(),
@@ -6558,6 +6583,7 @@ mod tests {
                     is_external: None,
                 },
                 ActivityImport {
+                    client_import_id: None,
                     id: None,
                     date: "2026-05-03".to_string(),
                     symbol: "AAPL".to_string(),
@@ -6845,6 +6871,7 @@ mod tests {
         );
 
         let manual_row = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "VWRPL".to_string(),
@@ -6918,6 +6945,7 @@ mod tests {
         );
 
         let invalid_date_row = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "invalid-date".to_string(),
             symbol: "VWRPL".to_string(),
@@ -6989,6 +7017,7 @@ mod tests {
         );
 
         let cash_row = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: String::new(),
@@ -7060,6 +7089,7 @@ mod tests {
         );
 
         let transfer_out = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2025-12-31".to_string(),
             symbol: String::new(),
@@ -7095,6 +7125,7 @@ mod tests {
         };
 
         let transfer_in = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2025-12-31T23:30:00-05:00".to_string(),
             symbol: String::new(),
@@ -7201,6 +7232,7 @@ mod tests {
         );
 
         let transfer_out = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2025-12-31".to_string(),
             symbol: String::new(),
@@ -7236,6 +7268,7 @@ mod tests {
         };
 
         let transfer_in = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2025-12-31".to_string(),
             symbol: String::new(),
@@ -7370,6 +7403,7 @@ mod tests {
         );
 
         let transfer_out = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2025-12-31".to_string(),
             symbol: String::new(),
@@ -7405,6 +7439,7 @@ mod tests {
         };
 
         let transfer_in_duplicate = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2025-12-31".to_string(),
             symbol: String::new(),
@@ -8305,6 +8340,7 @@ mod tests {
         );
 
         let duplicate = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "VWRL".to_string(),
@@ -8379,6 +8415,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: Some("client-row-1".to_string()),
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "VWRL".to_string(),
@@ -8417,6 +8454,7 @@ mod tests {
             .import_activities(vec![
                 import.clone(),
                 ActivityImport {
+                    client_import_id: Some("client-row-2".to_string()),
                     line_number: Some(2),
                     ..import
                 },
@@ -8429,6 +8467,31 @@ mod tests {
         assert_eq!(result.summary.duplicates, 1);
         assert_eq!(result.summary.skipped, 1);
         assert_eq!(result.activities[1].duplicate_of_line_number, Some(1));
+        assert_eq!(result.row_mappings.len(), 2);
+        assert_eq!(
+            result.row_mappings[0].client_import_id.as_deref(),
+            Some("client-row-1")
+        );
+        assert_eq!(
+            result.row_mappings[0].status,
+            ImportActivityRowStatus::Created
+        );
+        assert!(
+            result.row_mappings[0].activity_id.is_some(),
+            "created row should expose the inserted activity id"
+        );
+        assert_eq!(
+            result.row_mappings[1].client_import_id.as_deref(),
+            Some("client-row-2")
+        );
+        assert_eq!(
+            result.row_mappings[1].status,
+            ImportActivityRowStatus::Duplicate
+        );
+        assert!(
+            result.row_mappings[1].activity_id.is_none(),
+            "duplicate row must not be a follow-up mutation target"
+        );
 
         let stored = activity_repository
             .get_activities()
@@ -8515,6 +8578,7 @@ mod tests {
         );
 
         let forced = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "VWRL".to_string(),
@@ -8606,6 +8670,7 @@ mod tests {
         );
 
         let base = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "VWRL".to_string(),
@@ -8703,6 +8768,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-01-15".to_string(),
             symbol: "VWRL".to_string(),
@@ -9070,6 +9136,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-06-01".to_string(),
             symbol: "US912828ZT58".to_string(),
@@ -9138,6 +9205,7 @@ mod tests {
         );
 
         let resolved = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-06-01".to_string(),
             symbol: "US912828ZT58".to_string(),
@@ -9206,6 +9274,7 @@ mod tests {
 
         for alias in &["FIXEDINCOME", "FIXED_INCOME", "DEBT"] {
             let resolved = ActivityImport {
+                client_import_id: None,
                 id: None,
                 date: "2024-06-01".to_string(),
                 symbol: "US912828ZT58".to_string(),
@@ -9286,6 +9355,7 @@ mod tests {
 
         // Import with explicit BOND instrument_type; name/ccy should be enriched from asset
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2024-06-01".to_string(),
             symbol: "US912828ZT58".to_string(),
@@ -9367,6 +9437,7 @@ mod tests {
 
         // AAPL Sep 18, 2026 $200 Call (OCC format)
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2026-03-01".to_string(),
             symbol: "AAPL260918C00200000".to_string(),
@@ -9436,6 +9507,7 @@ mod tests {
 
         // SPY June 19, 2026 $580 Put (OCC format)
         let resolved = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2026-03-01".to_string(),
             symbol: "SPY260619P00580000".to_string(),
@@ -9514,6 +9586,7 @@ mod tests {
         );
 
         let import = ActivityImport {
+            client_import_id: None,
             id: None,
             date: "2026-04-01".to_string(),
             symbol: "AAPL260918C00200000".to_string(),

@@ -1,5 +1,6 @@
 import { vi, describe, it, expect } from "vitest";
 import { createSDKHostAPIBridge, type InternalHostAPI } from "./type-bridge";
+import type { TaxonomyWithCategories } from "@/lib/types";
 
 describe("Addon Type Bridge", () => {
   describe("createSDKHostAPIBridge", () => {
@@ -68,6 +69,49 @@ describe("Addon Type Bridge", () => {
 
       // Should fallback to default addon ID for empty string
       expect(mockLogInfo).toHaveBeenCalledWith("[unknown-addon] test message");
+    });
+
+    it("maps activity taxonomy categories using existing Wealthfolio taxonomy IDs", async () => {
+      const getTaxonomy = vi.fn(async (id: string): Promise<TaxonomyWithCategories | null> => ({
+        taxonomy: {
+          id,
+          name: id,
+          color: "#000000",
+          isSystem: true,
+          isSingleSelect: true,
+          sortOrder: 0,
+          createdAt: "2026-06-20T00:00:00Z",
+          updatedAt: "2026-06-20T00:00:00Z",
+          scope: "activity",
+        },
+        categories: [
+          {
+            id: `${id}-cat`,
+            taxonomyId: id,
+            parentId: null,
+            name: `${id} Category`,
+            key: `${id}_category`,
+            color: "#000000",
+            sortOrder: 0,
+            createdAt: "2026-06-20T00:00:00Z",
+            updatedAt: "2026-06-20T00:00:00Z",
+          },
+        ],
+      }));
+
+      const sdkAPI = createSDKHostAPIBridge({
+        getTaxonomy,
+      } as Partial<InternalHostAPI> as InternalHostAPI);
+
+      const categories = await sdkAPI.spending.categories.list();
+
+      expect(getTaxonomy).toHaveBeenCalledWith("spending_categories");
+      expect(getTaxonomy).toHaveBeenCalledWith("income_sources");
+      expect(getTaxonomy).toHaveBeenCalledWith("savings_categories");
+      expect(categories.income[0]).toMatchObject({
+        id: "income_sources-cat",
+        taxonomyId: "income_sources",
+      });
     });
   });
 });

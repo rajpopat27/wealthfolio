@@ -15,6 +15,9 @@ import {
   saveActivities,
   searchActivities,
   updateActivity,
+  findTransferMatchCandidates,
+  linkTransferActivities,
+  unlinkTransferActivities,
   createAccount,
   getAccounts,
   updateAccount,
@@ -79,6 +82,11 @@ import {
   backupDatabase,
   getSettings,
   updateSettings,
+  getTaxonomy,
+  getActivityAssignments,
+  assignActivityCategory,
+  bulkAssignCategories,
+  applyCategorizationRulesToActivities,
 } from "@/adapters";
 
 // Store for dynamically added navigation items
@@ -282,6 +290,9 @@ export function createAddonContext(addonId: string): AddonContext {
           createActivity,
           updateActivity,
           saveActivities,
+          findTransferMatchCandidates,
+          linkTransferActivities,
+          unlinkTransferActivities,
 
           // File operations
           openCsvFileDialog,
@@ -304,6 +315,13 @@ export function createAddonContext(addonId: string): AddonContext {
           checkActivitiesImport,
           getAccountImportMapping,
           saveAccountImportMapping,
+
+          // Spending
+          applyCategorizationRulesToActivities,
+          getTaxonomy,
+          getActivityAssignments,
+          assignActivityCategory,
+          bulkAssignCategories,
 
           // Snapshots
           getSnapshots,

@@ -13,8 +13,11 @@ import type {
   ActivityDetails,
   ActivityImport,
   ActivitySearchResponse,
+  ActivityTaxonomyAssignment,
+  ActivityTaxonomyCategoryList,
   ActivityUpdate,
   AccountValuation,
+  CategoryAssignmentInput,
   CheckSnapshotImportResult,
   ImportActivitiesResult,
   Asset,
@@ -32,11 +35,15 @@ import type {
   Quote,
   Settings,
   SimplePerformanceResult,
+  SpendingRuleApplyRequest,
+  SpendingRuleApplyResult,
   SnapshotHoldingInput,
   SnapshotImportResult,
   SnapshotInfo,
   SnapshotInput,
   SymbolSearchResult,
+  TransferMatchCandidate,
+  TransferMatchCandidateRequest,
   UpdateAssetProfile,
 } from './data-types';
 
@@ -204,6 +211,39 @@ export interface ActivitiesAPI {
    * @returns Promise resolving to saved mapping data
    */
   saveImportMapping(mapping: ImportMappingData): Promise<ImportMappingData>;
+
+  /**
+   * Find possible matching transfer rows for an activity.
+   */
+  findTransferMatchCandidates(
+    request: TransferMatchCandidateRequest,
+  ): Promise<TransferMatchCandidate[]>;
+
+  /**
+   * Link two transfer activities after explicit user confirmation.
+   */
+  linkTransferActivities(activityAId: string, activityBId: string): Promise<[Activity, Activity]>;
+
+  /**
+   * Remove a transfer link between two activities after explicit user confirmation.
+   */
+  unlinkTransferActivities(activityAId: string, activityBId: string): Promise<[Activity, Activity]>;
+}
+
+export interface SpendingRulesAPI {
+  applyToActivities(request: SpendingRuleApplyRequest): Promise<SpendingRuleApplyResult>;
+}
+
+export interface SpendingCategoriesAPI {
+  list(): Promise<ActivityTaxonomyCategoryList>;
+  getAssignments(params: { activityIds: string[] }): Promise<ActivityTaxonomyAssignment[]>;
+  assignActivity(input: CategoryAssignmentInput): Promise<ActivityTaxonomyAssignment>;
+  bulkAssign(items: CategoryAssignmentInput[]): Promise<ActivityTaxonomyAssignment[]>;
+}
+
+export interface SpendingAPI {
+  rules: SpendingRulesAPI;
+  categories: SpendingCategoriesAPI;
 }
 
 /**
@@ -789,6 +829,9 @@ export interface HostAPI {
 
   /** Snapshot management for HOLDINGS mode accounts */
   snapshots: SnapshotsAPI;
+
+  /** Spending rules and category operations */
+  spending: SpendingAPI;
 
   /** Secrets management */
   secrets: SecretsAPI;

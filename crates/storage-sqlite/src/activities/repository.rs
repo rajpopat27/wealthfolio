@@ -1816,7 +1816,9 @@ impl ActivityRepositoryTrait for ActivityRepository {
             .into_iter() // Consumes activities_vec
             .map(|new_act| {
                 let mut db: ActivityDB = new_act.into();
-                db.id = Uuid::new_v4().to_string();
+                if db.id.trim().is_empty() {
+                    db.id = Uuid::new_v4().to_string();
+                }
                 db
             })
             .collect();

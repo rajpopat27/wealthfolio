@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { QuoteMode } from "./constants";
-import { importActivitySchema, importMappingSchema } from "./schemas";
+import { importActivitySchema, importMappingSchema, newAccountSchema } from "./schemas";
 
 describe("schemas", () => {
   describe("importMappingSchema", () => {
@@ -119,6 +119,39 @@ describe("schemas", () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.quoteMode).toBeUndefined();
+      }
+    });
+
+    it("preserves clientImportId for import row correlation", () => {
+      const result = importActivitySchema.safeParse({
+        accountId: "account-1",
+        clientImportId: "import-addon:2:0",
+        activityType: "DEPOSIT",
+        date: "2026-06-20",
+        amount: 123.45,
+        currency: "INR",
+        isDraft: false,
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.clientImportId).toBe("import-addon:2:0");
+      }
+    });
+  });
+
+  describe("newAccountSchema", () => {
+    it("does not accept import row correlation fields", () => {
+      const result = newAccountSchema.safeParse({
+        clientImportId: "wrong-schema",
+        name: "Brokerage",
+        accountType: "SECURITIES",
+        currency: "INR",
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect("clientImportId" in result.data).toBe(false);
       }
     });
   });

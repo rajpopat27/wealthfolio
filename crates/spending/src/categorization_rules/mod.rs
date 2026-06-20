@@ -13,5 +13,5 @@ pub use model::{
     CategorizationRule, NewCategorizationRule, RuleMatchType, UpdateCategorizationRule,
 };
 pub use presets::{ImportPresetResult, RemovePresetResult, RulePreset, RulePresetSummary};
-pub use service::CategorizationRulesService;
+pub use service::{CategorizationRulesService, RuleApplicationResult};
 pub use traits::{CategorizationRulesRepositoryTrait, PresetImportCounts};
