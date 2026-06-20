@@ -309,6 +309,12 @@ impl<P: SyncProgressReporter> SyncOrchestrator<P> {
             ImportRunMode::Incremental
         };
 
+        if !query_window.has_local_cursor {
+            self.bootstrap_initial_activity_cursor(job, &query_window, import_mode, &mut result)
+                .await;
+            return result;
+        }
+
         let import_run = match self
             .sync_service
             .create_import_run(&job.account_id, import_mode)
@@ -373,6 +379,100 @@ impl<P: SyncProgressReporter> SyncOrchestrator<P> {
         }
 
         result
+    }
+
+    async fn bootstrap_initial_activity_cursor(
+        &self,
+        job: &AccountSyncJob,
+        query_window: &ActivityQueryWindow,
+        import_mode: ImportRunMode,
+        result: &mut ActivityPhaseResult,
+    ) {
+        let import_run = match self
+            .sync_service
+            .create_import_run(&job.account_id, import_mode)
+            .await
+        {
+            Ok(run) => Some(run),
+            Err(e) => {
+                error!(
+                    "Failed to create initial activity cursor import run for '{}': {}",
+                    job.account_name, e
+                );
+                None
+            }
+        };
+        result.activity_import_run_id = import_run.as_ref().map(|r| r.id.clone());
+
+        let cursor_result = self
+            .sync_service
+            .finalize_activity_sync_success(
+                job.account_id.clone(),
+                query_window.end_date.clone(),
+                result.activity_import_run_id.clone(),
+            )
+            .await;
+
+        if let Err(err) = cursor_result {
+            let message = format!("Initial activity cursor bootstrap failed: {}", err);
+            if let Some(ref run_id) = result.activity_import_run_id {
+                let _ = self
+                    .sync_service
+                    .finalize_import_run(
+                        run_id,
+                        ImportRunSummary::default(),
+                        ImportRunStatus::Failed,
+                        Some(message.clone()),
+                    )
+                    .await;
+            }
+
+            if job.is_holdings_mode() {
+                result.summary.accounts_warned += 1;
+                result.activity_warning = Some(message.clone());
+                self.progress_reporter.report_progress(
+                    SyncProgressPayload::new(
+                        &job.account_id,
+                        &job.account_name,
+                        SyncStatus::NeedsReview,
+                    )
+                    .with_message(message),
+                );
+            } else {
+                result.summary.accounts_failed += 1;
+                result.continue_account = false;
+                self.progress_reporter.report_progress(
+                    SyncProgressPayload::new(
+                        &job.account_id,
+                        &job.account_name,
+                        SyncStatus::Failed,
+                    )
+                    .with_message(message),
+                );
+            }
+            return;
+        }
+
+        if let Some(ref run_id) = result.activity_import_run_id {
+            let _ = self
+                .sync_service
+                .finalize_import_run(
+                    run_id,
+                    ImportRunSummary::default(),
+                    ImportRunStatus::Applied,
+                    None,
+                )
+                .await;
+        }
+
+        result.summary.accounts_synced += 1;
+        self.progress_reporter.report_progress(
+            SyncProgressPayload::new(&job.account_id, &job.account_name, SyncStatus::Complete)
+                .with_message(format!(
+                    "Initial broker activity history skipped; future syncs start from {}",
+                    query_window.end_date
+                )),
+        );
     }
 
     async fn handle_activity_sync_success(

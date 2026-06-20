@@ -778,6 +778,7 @@ mod tests {
                 "broker-1",
                 TrackingMode::Transactions,
             )],
+            activity_state: Some(sync_state("account-1", "2026-05-21T00:00:00Z")),
             upsert_result: (1, 1, vec!["asset-1".to_string()], 0),
             ..MockSyncService::default()
         });
@@ -827,6 +828,58 @@ mod tests {
         let calls = service.calls.lock().unwrap();
         assert_eq!(calls.activity_successes.len(), 0);
         assert_eq!(calls.activity_needs_review.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn initial_activity_sync_bootstraps_cursor_without_fetching_history() {
+        let service = Arc::new(MockSyncService {
+            accounts: vec![synced_account(
+                "account-1",
+                "broker-1",
+                TrackingMode::Transactions,
+            )],
+            ..MockSyncService::default()
+        });
+        let api_client = MockBrokerApiClient {
+            activity_pages: Mutex::new(vec![PaginatedUniversalActivity {
+                data: vec![AccountUniversalActivity {
+                    id: Some("historical-activity".to_string()),
+                    ..AccountUniversalActivity::default()
+                }],
+                pagination: Some(PaginationDetails {
+                    has_more: Some(false),
+                    total: Some(1),
+                    ..PaginationDetails::default()
+                }),
+            }]),
+            ..MockBrokerApiClient::default()
+        };
+        let mut provider_statuses = HashMap::new();
+        provider_statuses.insert("broker-1".to_string(), ready_status("2026-05-22", None));
+
+        let (activities, holdings) = orchestrator(service.clone())
+            .sync_account_data(
+                &api_client,
+                &HashSet::from(["broker-1".to_string()]),
+                &provider_statuses,
+                &HashMap::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(activities.accounts_synced, 1);
+        assert_eq!(activities.activities_upserted, 0);
+        assert_eq!(holdings.accounts_synced, 0);
+        assert_eq!(*api_client.activity_calls.lock().unwrap(), 0);
+
+        let calls = service.calls.lock().unwrap();
+        assert_eq!(calls.activity_successes.len(), 1);
+        assert_eq!(calls.activity_successes[0].1, "2026-05-22");
+        assert!(calls.activity_successes[0].2.is_some());
+        assert_eq!(calls.finalized_import_runs.len(), 1);
+        assert_eq!(calls.finalized_import_runs[0].2, ImportRunStatus::Applied);
+        assert_eq!(calls.finalized_import_runs[0].1.fetched, 0);
+        assert_eq!(calls.finalized_import_runs[0].1.inserted, 0);
     }
 
     #[tokio::test]
@@ -923,6 +976,7 @@ mod tests {
                 synced_account("account-1", "broker-1", TrackingMode::Transactions),
                 synced_account("account-2", "broker-2", TrackingMode::Holdings),
             ],
+            activity_state: Some(sync_state("account-1", "2026-05-21T00:00:00Z")),
             upsert_result: (1, 0, Vec::new(), 0),
             ..MockSyncService::default()
         });
