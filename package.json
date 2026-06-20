@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "pnpm --filter frontend dev",
     "dev:tauri": "pnpm --filter frontend dev:tauri",
+    "dev:tauri:local-connect": "CONNECT_LOCAL_MODE=${CONNECT_LOCAL_MODE:-true} CONNECT_API_URL=${CONNECT_API_URL:-http://127.0.0.1:8787} CONNECT_AUTH_URL=${CONNECT_AUTH_URL:-${CONNECT_API_URL:-http://127.0.0.1:8787}} CONNECT_AUTH_PUBLISHABLE_KEY=${CONNECT_AUTH_PUBLISHABLE_KEY:-local} pnpm tauri dev",
     "dev:addons": "pnpm --filter frontend dev:addons",
     "dev:web": "node scripts/dev-web.mjs",
     "dev:web:log": "node scripts/dev-web.mjs --file-log",

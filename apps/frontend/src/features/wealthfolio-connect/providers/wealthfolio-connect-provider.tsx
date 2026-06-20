@@ -33,10 +33,16 @@ const AUTH_URL = (import.meta.env.CONNECT_AUTH_URL as string) || "https://auth.w
 const AUTH_PUBLISHABLE_KEY =
   (import.meta.env.CONNECT_AUTH_PUBLISHABLE_KEY as string) ||
   "sb_publishable_ZSZbXNtWtnh9i2nqJ2UL4A_NV8ZVutd";
+const CONNECT_API_URL = import.meta.env.CONNECT_API_URL as string | undefined;
 
 // Key for storing refresh token in keyring/localStorage (for session restoration)
 // Note: For keyring (Tauri), the "wealthfolio_" prefix is added automatically by SecretStore
 const REFRESH_TOKEN_KEY = "sync_refresh_token";
+const LOCAL_REFRESH_TOKEN = "local-refresh-token";
+
+const CONNECT_LOCAL_MODE =
+  (import.meta.env.CONNECT_LOCAL_MODE as string | undefined)?.toLowerCase() === "true" ||
+  AUTH_PUBLISHABLE_KEY === "local";
 
 // Deep-link URL for desktop callbacks (custom URL scheme)
 const DESKTOP_DEEP_LINK_URL = "wealthfolio://auth/callback";
@@ -66,6 +72,37 @@ interface PostLoginSyncRequest {
   userId: string;
   createdAt: number;
   source: PostLoginSyncSource;
+}
+
+function createLocalUser(): User {
+  const now = new Date().toISOString();
+  return {
+    id: "local-user",
+    app_metadata: {
+      provider: "local",
+      providers: ["local"],
+      team_id: "local-team",
+    },
+    user_metadata: {
+      full_name: "Local Wealthfolio",
+    },
+    aud: "authenticated",
+    created_at: now,
+    email: "local@wealthfolio",
+    role: "authenticated",
+    updated_at: now,
+  } as User;
+}
+
+function createLocalSession(accessToken: string, refreshToken: string): Session {
+  return {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    token_type: "bearer",
+    user: createLocalUser(),
+  } as Session;
 }
 
 interface WealthfolioConnectContextValue {
@@ -849,6 +886,144 @@ function EnabledWealthfolioConnectProvider({ children }: { children: ReactNode }
   );
 }
 
+function LocalWealthfolioConnectProvider({ children }: { children: ReactNode }) {
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refetchUserInfo = useCallback(async () => {
+    setIsLoadingUserInfo(true);
+    setError(null);
+
+    try {
+      const info = await getUserInfo();
+      setUserInfo(info);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to fetch local Connect user";
+      logger.error(`Failed to fetch local Connect user info: ${message}`);
+      setUserInfo(null);
+      setError(message);
+    } finally {
+      setIsLoadingUserInfo(false);
+    }
+  }, []);
+
+  const initializeLocalSession = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await storeSyncSession(LOCAL_REFRESH_TOKEN);
+      await setSecret(REFRESH_TOKEN_KEY, LOCAL_REFRESH_TOKEN).catch((err) => {
+        logger.warn(`Failed to store local refresh token: ${err}`);
+      });
+
+      const restored = await restoreSyncSession();
+      const localSession = createLocalSession(restored.accessToken, restored.refreshToken);
+      setSession(localSession);
+      setUser(localSession.user);
+      await refetchUserInfo();
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : `Local Connect is not available${CONNECT_API_URL ? ` at ${CONNECT_API_URL}` : ""}`;
+      logger.error(`Failed to initialize local Connect session: ${message}`);
+      setSession(null);
+      setUser(null);
+      setUserInfo(null);
+      setError(message);
+    } finally {
+      setIsLoading(false);
+      setIsInitializing(false);
+    }
+  }, [refetchUserInfo]);
+
+  useEffect(() => {
+    void initializeLocalSession();
+  }, [initializeLocalSession]);
+
+  const signOut = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await clearSyncSession();
+      await deleteSecret(REFRESH_TOKEN_KEY).catch((err) => {
+        logger.warn(`Failed to delete local refresh token: ${err}`);
+      });
+      setSession(null);
+      setUser(null);
+      setUserInfo(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to clear local Connect session";
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const signInLocally = useCallback(async () => {
+    await initializeLocalSession();
+  }, [initializeLocalSession]);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  const teamId = useMemo(() => {
+    return (user?.app_metadata?.team_id as string | undefined) ?? "local-team";
+  }, [user]);
+
+  const value = useMemo<WealthfolioConnectContextValue>(
+    () => ({
+      isEnabled: true,
+      isConnected: !!session,
+      isInitializing,
+      isLoading,
+      isLoadingUserInfo,
+      user,
+      session,
+      teamId,
+      userInfo,
+      postLoginSyncRequest: null,
+      error,
+      signInWithEmail: signInLocally,
+      signUpWithEmail: signInLocally,
+      signInWithOAuth: signInLocally,
+      signInWithMagicLink: signInLocally,
+      verifyOtp: signInLocally,
+      signOut,
+      clearError,
+      refetchUserInfo,
+      consumePostLoginSyncRequest: () => {},
+    }),
+    [
+      session,
+      isInitializing,
+      isLoading,
+      isLoadingUserInfo,
+      user,
+      teamId,
+      userInfo,
+      error,
+      signInLocally,
+      signOut,
+      clearError,
+      refetchUserInfo,
+    ],
+  );
+
+  return (
+    <WealthfolioConnectContext.Provider value={value}>
+      {children}
+    </WealthfolioConnectContext.Provider>
+  );
+}
+
 // Main provider that chooses enabled/disabled path based on configuration
 export function WealthfolioConnectProvider({ children }: { children: ReactNode }) {
   const [isCapabilityCheckComplete, setIsCapabilityCheckComplete] = useState(!CONNECT_ENABLED);
@@ -901,6 +1076,10 @@ export function WealthfolioConnectProvider({ children }: { children: ReactNode }
         {children}
       </WealthfolioConnectContext.Provider>
     );
+  }
+
+  if (CONNECT_LOCAL_MODE) {
+    return <LocalWealthfolioConnectProvider>{children}</LocalWealthfolioConnectProvider>;
   }
 
   return <EnabledWealthfolioConnectProvider>{children}</EnabledWealthfolioConnectProvider>;

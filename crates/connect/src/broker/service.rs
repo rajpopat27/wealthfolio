@@ -245,6 +245,13 @@ impl BrokerSyncServiceTrait for BrokerSyncService {
 
             let account_type = broker_account.get_account_type();
             let tracking_mode = default_tracking_mode_for_broker_account_type(&account_type);
+            let provider = broker_account
+                .meta
+                .as_ref()
+                .and_then(|meta| meta.get("provider"))
+                .and_then(serde_json::Value::as_str)
+                .map(|value| value.to_ascii_uppercase())
+                .unwrap_or_else(|| "WEALTHFOLIO_CONNECT".to_string());
 
             // Create new broker account with tracking mode matching the canonical account type.
             let new_account = NewAccount {
@@ -258,7 +265,7 @@ impl BrokerSyncServiceTrait for BrokerSyncService {
                 platform_id,
                 account_number: broker_account.account_number.clone(),
                 meta: broker_account.to_meta_json(),
-                provider: Some("SNAPTRADE".to_string()),
+                provider: Some(provider),
                 provider_account_id: Some(provider_account_id.clone()),
                 is_archived: false,
                 tracking_mode,

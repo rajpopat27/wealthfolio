@@ -552,7 +552,7 @@ pub fn map_broker_activity(
         needs_review: Some(needs_review_flag),
         source_system: normalize_source_system(activity.source_system.as_deref())
             .or_else(|| normalize_source_system(activity.provider_type.as_deref()))
-            .or_else(|| Some("SNAPTRADE".to_string())),
+            .or_else(|| Some("WEALTHFOLIO_CONNECT".to_string())),
         source_record_id: activity
             .source_record_id
             .clone()

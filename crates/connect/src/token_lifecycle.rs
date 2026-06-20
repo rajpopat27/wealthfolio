@@ -15,6 +15,7 @@ pub const CLOUD_ACCESS_TOKEN_KEY: &str = "sync_access_token";
 
 const DEFAULT_EXPIRY_BUFFER_SECS: u64 = 60;
 const DEFAULT_REFRESH_TIMEOUT_SECS: u64 = 10;
+const LOCAL_REFRESH_TOKEN: &str = "local-refresh-token";
 
 #[derive(Debug, Clone)]
 pub struct TokenLifecycleConfig {
@@ -36,6 +37,10 @@ impl TokenLifecycleConfig {
 
     pub fn is_configured(&self) -> bool {
         !self.auth_url.is_empty() && !self.publishable_key.is_empty()
+    }
+
+    pub fn is_local_mode(&self) -> bool {
+        self.publishable_key == "local"
     }
 }
 
@@ -131,6 +136,11 @@ pub async fn ensure_valid_access_token(
     let refresh_token = secret_store
         .get_secret(CLOUD_REFRESH_TOKEN_KEY)
         .map_err(|e| TokenLifecycleError::Internal(format!("Failed to read refresh token: {}", e)))?
+        .or_else(|| {
+            config
+                .is_local_mode()
+                .then(|| LOCAL_REFRESH_TOKEN.to_string())
+        })
         .ok_or_else(|| {
             TokenLifecycleError::Unauthorized(
                 "No refresh token configured. Please sign in first.".to_string(),
@@ -408,6 +418,22 @@ mod tests {
             SystemTime::now(),
             60
         ));
+    }
+
+    #[test]
+    fn local_key_enables_local_mode_for_any_auth_url() {
+        let config = TokenLifecycleConfig::new("http://127.0.0.1:8787".into(), "local".into());
+        assert!(config.is_local_mode());
+
+        let config =
+            TokenLifecycleConfig::new("https://broker.example.test".into(), "local".into());
+        assert!(config.is_local_mode());
+
+        let config = TokenLifecycleConfig::new(
+            "https://broker.example.test".into(),
+            "sb_publishable_test".into(),
+        );
+        assert!(!config.is_local_mode());
     }
 
     #[test]
