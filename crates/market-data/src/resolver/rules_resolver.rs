@@ -13,6 +13,8 @@ use super::exchange_suffixes::ExchangeMap;
 use super::traits::{ResolutionSource, ResolvedInstrument, Resolver};
 use super::yahoo_equity_base_to_provider;
 
+const INDIAN_EQUITY_SERIES_SUFFIXES: &[&str] = &["-EQ"];
+
 /// Resolves provider instruments from deterministic MIC->suffix rules.
 ///
 /// This resolver handles:
@@ -70,7 +72,8 @@ impl RulesResolver {
         }
 
         let provider_ticker = if provider.as_ref() == "YAHOO" {
-            yahoo_equity_base_to_provider(ticker)
+            let ticker = strip_indian_equity_series_suffix(ticker, mic);
+            yahoo_equity_base_to_provider(&ticker)
         } else {
             ticker.to_string()
         };
@@ -202,6 +205,28 @@ impl RulesResolver {
             _ => None,
         }
     }
+}
+
+fn strip_indian_equity_series_suffix(
+    ticker: &str,
+    mic: &Option<std::borrow::Cow<'static, str>>,
+) -> String {
+    let trimmed = ticker.trim();
+    let is_indian_exchange = mic
+        .as_deref()
+        .is_some_and(|mic| matches!(mic.to_uppercase().as_str(), "XNSE" | "XBOM"));
+
+    if is_indian_exchange {
+        for suffix in INDIAN_EQUITY_SERIES_SUFFIXES {
+            if trimmed.len() > suffix.len()
+                && trimmed[trimmed.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
+            {
+                return trimmed[..trimmed.len() - suffix.len()].to_string();
+            }
+        }
+    }
+
+    trimmed.to_string()
 }
 
 impl Default for RulesResolver {
@@ -351,6 +376,42 @@ mod tests {
         match resolved.instrument {
             ProviderInstrument::EquitySymbol { symbol } => {
                 assert_eq!(symbol.as_ref(), "SHOP.TO");
+            }
+            _ => panic!("Expected EquitySymbol"),
+        }
+    }
+
+    #[test]
+    fn test_resolve_indian_equity_strips_fyers_series_suffix_for_yahoo() {
+        let resolver = RulesResolver::new();
+        let context = make_equity_context("JYOTISTRUC-EQ", Some("XNSE"));
+
+        let result = resolver.resolve(&"YAHOO".into(), &context);
+
+        assert!(result.is_some());
+        let resolved = result.unwrap().unwrap();
+
+        match resolved.instrument {
+            ProviderInstrument::EquitySymbol { symbol } => {
+                assert_eq!(symbol.as_ref(), "JYOTISTRUC.NS");
+            }
+            _ => panic!("Expected EquitySymbol"),
+        }
+    }
+
+    #[test]
+    fn test_resolve_indian_equity_series_suffix_is_market_scoped() {
+        let resolver = RulesResolver::new();
+        let context = make_equity_context("ACME-EQ", None);
+
+        let result = resolver.resolve(&"YAHOO".into(), &context);
+
+        assert!(result.is_some());
+        let resolved = result.unwrap().unwrap();
+
+        match resolved.instrument {
+            ProviderInstrument::EquitySymbol { symbol } => {
+                assert_eq!(symbol.as_ref(), "ACME-EQ");
             }
             _ => panic!("Expected EquitySymbol"),
         }
